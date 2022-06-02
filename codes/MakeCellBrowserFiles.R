@@ -13,11 +13,11 @@
 #   Example
 #               > source("The_directory_of_MakeCellBrowserFiles.R/MakeCellBrowserFiles.R")
 #               > make_files(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTasks/data/tx_rmct_dim10_res03_label.Robj",
-#                            outputDir="/Users/hyunjin.kim2/Documents/SimpleTasks/results/")
+#                            outputDir="/Users/hyunjin.kim2/Documents/SimpleTasks/results/CellBrowser/")
 ###
 
 make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTasks/data/tx_rmct_dim10_res03_label.Robj",
-                       outputDir="/Users/hyunjin.kim2/Documents/SimpleTasks/results/") {
+                       outputDir="/Users/hyunjin.kim2/Documents/SimpleTasks/results/CellBrowser/") {
   
   ### load libraries
   if(!require(Seurat, quietly = TRUE)) {
@@ -59,6 +59,12 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   ExportToCellbrowser(object = seurat_obj,
                       dir = outputDir)
   
+  ### test it internally
+  # cd /Users/hyunjin.kim2/Documents/SimpleTasks/results/CellBrowser/
+  ### if you see 'Point your internet browser to http://127.0.0.1:8888 (or the IP address of this server)'
+  ### then go to http://127.0.0.1:8888
   
+  ### recover the seurat version
+  remotes::install_version(package = 'Seurat', version = package_version('4.1.1'))
   
 }
