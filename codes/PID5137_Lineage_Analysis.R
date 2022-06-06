@@ -365,5 +365,289 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
   }
   
   
+  ### using existing UMAP cords for the trajectory analysis
+  
+  ### overwrite the current CDS UMAP with original seurat UMAP
+  cds@int_colData@listData$reducedDims$UMAP <- seurat_obj@reductions$umap@cell.embeddings
+  
+  ### cluster the data
+  cds <- cluster_cells(cds)
+  
+  ### find all possible partitions
+  all_partitions <- unique(cds@clusters$UMAP$partitions)
+  all_partitions <- all_partitions[all_partitions != "1"]
+  
+  ### set all partitions to 1
+  cds@clusters$UMAP$partitions[cds@clusters$UMAP$partitions %in% all_partitions] <- "1"
+  
+  ### learn trajectory 
+  cds <- learn_graph(cds)
+  
+  ### plot trajectory
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "seurat_clusters",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 7)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_clusters_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "sample.cel",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  label_cell_groups = FALSE,
+                  group_label_size = 7)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_sample_cel_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "sample.tis",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  label_cell_groups = FALSE,
+                  group_label_size = 7)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_sample_tis_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "sample.trt",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  label_cell_groups = FALSE,
+                  group_label_size = 7)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_sample_trt_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "sample.hdm",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  label_cell_groups = FALSE,
+                  group_label_size = 7)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_sample_hdm_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  ### phenotype that tends to be a starting point
+  target_idx <- intersect(intersect(which(cds@colData$sample.tis == "blood"),
+                                    which(cds@colData$sample.hdm == "saline")),
+                          intersect(which(cds@colData$sample.cel == "monocytes"),
+                                    which(cds@colData$sample.trt == "15 week saline")))
+  
+  ### check where the phenotype is located
+  cds@colData$target <- "Non-Target"
+  cds@colData$target[target_idx] <- "Target"
+  
+  plot_cells(cds,
+             color_cells_by = "target",
+             label_groups_by_cluster=FALSE,
+             label_leaves=FALSE,
+             label_branch_points=FALSE)
+  
+  ### based on the plot, cluster 5 seems to be the starting point
+  ### order cells based on the cluster 5 cells
+  cds <- order_cells(cds, root_cells = rownames(cds@colData)[which(cds@colData$seurat_clusters == "5")])
+  
+  ### see how the pseudotime looks like
+  p <- plot_cells(cds,
+                  color_cells_by = "pseudotime",
+                  label_cell_groups=FALSE,
+                  label_leaves=FALSE,
+                  label_branch_points=FALSE,
+                  label_roots = FALSE,
+                  trajectory_graph_color = "green",
+                  trajectory_graph_segment_size = 1.5)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_pseudotime_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  #
+  ### MONOCYTES -> DC2 SUB CLUSTERS
+  #
+  
+  ### check whether the orders are the same
+  print(identical(rownames(seurat_obj@meta.data), colnames(seurat_obj@assays$RNA@counts)))
+  print(identical(names(Idents(object = seurat_obj)), rownames(seurat_obj@meta.data)))
+  
+  ### subset Mgl2+ cells
+  subset_seurat_obj <- subset(seurat_obj,
+                              cells = colnames(seurat_obj@assays$RNA@counts)[which(seurat_obj@assays$RNA@counts["Mgl2",] > 10)])
+  
+  ### check the UMAP
+  DimPlot(object = subset_seurat_obj, reduction = "umap",
+          group.by = "seurat_clusters",
+          pt.size = 1,
+          label = TRUE) +
+    theme(legend.position = "none")
+  
+  ### construct a monocle cds
+  sub_cds <- new_cell_data_set(as(subset_seurat_obj@assays$RNA@counts, 'sparseMatrix'),
+                               cell_metadata = subset_seurat_obj@meta.data,
+                               gene_metadata = data.frame(gene_short_name = row.names(subset_seurat_obj@assays$RNA@counts),
+                                                          row.names = row.names(subset_seurat_obj@assays$RNA@counts),
+                                                          stringsAsFactors = FALSE, check.names = FALSE))
+  
+  ### pre-process the data
+  sub_cds <- preprocess_cds(sub_cds, num_dim = 50)
+  
+  ### overwrite the current CDS UMAP with original seurat UMAP
+  sub_cds@int_colData@listData$reducedDims$UMAP <- subset_seurat_obj@reductions$umap@cell.embeddings
+  
+  ### cluster the data
+  sub_cds <- cluster_cells(sub_cds,
+                           k = 100,
+                           partition_qval = 0.01)
+  
+  ### learn trajectory 
+  sub_cds <- learn_graph(sub_cds)
+  
+  ### plot trajectory
+  p <- plot_cells(sub_cds,
+                  label_roots = FALSE,
+                  color_cells_by = "seurat_clusters",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 0,
+                  cell_size = 0.75)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_Mgl2_subset_clusters_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  ### now divide into saline, 4wk HDM, and 15wk HDM
+  ### and do the same analysis
+  
+  for(trt in unique(subset_seurat_obj$sample.trt)) {
+    
+    ### subset
+    subset_seurat_obj2 <- subset(subset_seurat_obj,
+                                 cells = rownames(subset_seurat_obj@meta.data)[which(subset_seurat_obj$sample.trt == trt)])
+    
+    ### construct a monocle cds
+    sub_cds2 <- new_cell_data_set(as(subset_seurat_obj2@assays$RNA@counts, 'sparseMatrix'),
+                                  cell_metadata = subset_seurat_obj2@meta.data,
+                                  gene_metadata = data.frame(gene_short_name = row.names(subset_seurat_obj2@assays$RNA@counts),
+                                                            row.names = row.names(subset_seurat_obj2@assays$RNA@counts),
+                                                            stringsAsFactors = FALSE, check.names = FALSE))
+    
+    ### pre-process the data
+    sub_cds2 <- preprocess_cds(sub_cds2, num_dim = 50)
+    
+    ### overwrite the current CDS UMAP with original seurat UMAP
+    sub_cds2@int_colData@listData$reducedDims$UMAP <- subset_seurat_obj2@reductions$umap@cell.embeddings
+    
+    ### cluster the data
+    sub_cds2 <- cluster_cells(sub_cds2,
+                              k = 50,
+                              partition_qval = 0.01)
+    
+    ### learn trajectory 
+    sub_cds2 <- learn_graph(sub_cds2)
+    
+    ### plot trajectory
+    p <- plot_cells(sub_cds2,
+                    label_roots = FALSE,
+                    color_cells_by = "seurat_clusters",
+                    label_groups_by_cluster = FALSE,
+                    label_leaves = FALSE,
+                    label_branch_points = FALSE,
+                    group_label_size = 0,
+                    cell_size = 0.75)
+    ggsave(paste0(outputDir, "Monocle3_trajectory_Mgl2_", trt, "_subset_clusters_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+    
+  }
+  
+  
+  #
+  ### macrophage trajectory
+  #
+  
+  ### subset lung cells
+  subset_seurat_obj <- subset(seurat_obj,
+                              cells = rownames(seurat_obj@meta.data)[which(seurat_obj$sample.cel == "macrophages")])
+  
+  ### check the UMAP
+  DimPlot(object = subset_seurat_obj, reduction = "umap",
+          group.by = "seurat_clusters",
+          pt.size = 1,
+          label = TRUE) +
+    theme(legend.position = "none")
+  
+  ### construct a monocle cds
+  sub_cds <- new_cell_data_set(as(subset_seurat_obj@assays$RNA@counts, 'sparseMatrix'),
+                               cell_metadata = subset_seurat_obj@meta.data,
+                               gene_metadata = data.frame(gene_short_name = row.names(subset_seurat_obj@assays$RNA@counts),
+                                                          row.names = row.names(subset_seurat_obj@assays$RNA@counts),
+                                                          stringsAsFactors = FALSE, check.names = FALSE))
+  
+  ### pre-process the data
+  sub_cds <- preprocess_cds(sub_cds, num_dim = 50)
+  
+  ### overwrite the current CDS UMAP with original seurat UMAP
+  sub_cds@int_colData@listData$reducedDims$UMAP <- subset_seurat_obj@reductions$umap@cell.embeddings
+  
+  ### cluster the data
+  sub_cds <- cluster_cells(sub_cds,
+                           k = 300,
+                           partition_qval = 0.01)
+  
+  ### learn trajectory 
+  sub_cds <- learn_graph(sub_cds)
+  
+  ### plot trajectory
+  p <- plot_cells(sub_cds,
+                  label_roots = FALSE,
+                  color_cells_by = "seurat_clusters",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 0,
+                  cell_size = 0.75)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_Macrophage_subset_clusters_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  ### now divide into saline, 4wk HDM, and 15wk HDM
+  ### and do the same analysis
+  
+  for(trt in unique(subset_seurat_obj$sample.trt)) {
+    
+    ### subset
+    subset_seurat_obj2 <- subset(subset_seurat_obj,
+                                 cells = rownames(subset_seurat_obj@meta.data)[which(subset_seurat_obj$sample.trt == trt)])
+    
+    ### construct a monocle cds
+    sub_cds2 <- new_cell_data_set(as(subset_seurat_obj2@assays$RNA@counts, 'sparseMatrix'),
+                                  cell_metadata = subset_seurat_obj2@meta.data,
+                                  gene_metadata = data.frame(gene_short_name = row.names(subset_seurat_obj2@assays$RNA@counts),
+                                                             row.names = row.names(subset_seurat_obj2@assays$RNA@counts),
+                                                             stringsAsFactors = FALSE, check.names = FALSE))
+    
+    ### pre-process the data
+    sub_cds2 <- preprocess_cds(sub_cds2, num_dim = 50)
+    
+    ### overwrite the current CDS UMAP with original seurat UMAP
+    sub_cds2@int_colData@listData$reducedDims$UMAP <- subset_seurat_obj2@reductions$umap@cell.embeddings
+    
+    ### cluster the data
+    sub_cds2 <- cluster_cells(sub_cds2,
+                              k = 100,
+                              partition_qval = 0.01)
+    
+    ### learn trajectory 
+    sub_cds2 <- learn_graph(sub_cds2)
+    
+    ### plot trajectory
+    p <- plot_cells(sub_cds2,
+                    label_roots = FALSE,
+                    color_cells_by = "seurat_clusters",
+                    label_groups_by_cluster = FALSE,
+                    label_leaves = FALSE,
+                    label_branch_points = FALSE,
+                    group_label_size = 0,
+                    cell_size = 0.75)
+    ggsave(paste0(outputDir, "Monocle3_trajectory_Macrophage_", trt, "_subset_clusters_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+    
+  }
+  
   
 }
