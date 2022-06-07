@@ -3,7 +3,7 @@
 #   Author    : Hyunjin Kim
 #   Date      : May 31, 2022
 #   Email     : hyunjin.kim2@regeneron.com
-#   Purpose   : Run monocle2 on the given single cell dataset.
+#   Purpose   : Run monocle3 on the given single cell dataset.
 #
 #   Instruction
 #               1. Source("PID5137_Lineage_Analysis")
