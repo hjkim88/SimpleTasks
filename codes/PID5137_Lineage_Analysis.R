@@ -30,11 +30,17 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
   }
   if(!require(monocle3, quietly = TRUE)) {
     devtools::install_github('cole-trapnell-lab/monocle3')
-    require(monocle, quietly = TRUE)
+    require(monocle3, quietly = TRUE)
   }
   if(!require(ggplot2, quietly = TRUE)) {
     install.packages("ggplot2")
     require(ggplot2, quietly = TRUE)
+  }
+  if(!require(monocle, quietly = TRUE)) {
+    if (!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("monocle")
+    require(monocle, quietly = TRUE)
   }
   
   ### loads an RData file, and returns it
@@ -691,7 +697,7 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
       stop("You must first call reduceDimension() before using this function")
     }
     
-    dp_mst <- minSpanningTree(cds)
+    dp_mst <- cds@principal_graph$UMAP
     
     
     if(is.null(root_states)) {
@@ -835,6 +841,19 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
             axis.ticks = element_blank()) 
     g
   }
+  
+  ### load the new annotation info
+  ### id - cluster#, label - annotation info
+  new_anno <- read.table(file = "./data/cluster_annot.txt", header = TRUE, sep = "\t",
+                         stringsAsFactors = FALSE, check.names = FALSE)
+  rownames(new_anno) <- new_anno$id
+  
+  ### annotate
+  seurat_obj$new_anno <- NA
+  for(clstr in unique(as.character(seurat_obj$seurat_clusters))) {
+    seurat_obj$new_anno[which(seurat_obj$seurat_clusters == clstr)] <- new_anno[clstr,"label"]
+  }
+  
   
   ### tree representation of the overall trajectory
   ### root cluster = 5
