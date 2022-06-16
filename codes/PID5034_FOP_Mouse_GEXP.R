@@ -3,7 +3,7 @@
 #   Author    : Hyunjin Kim
 #   Date      : Jun 13, 2022
 #   Email     : hyunjin.kim2@regeneron.com
-#   Purpose   : see gene expression differences among tissues in mouse endothelial cells
+#   Purpose   : See gene expression differences among tissues in mouse endothelial cells
 #
 #   Instruction
 #               1. Source("PID5034_FOP_Mouse_GEXP.R")
@@ -62,12 +62,23 @@ gexp_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleTas
   print(identical(names(Idents(object = seurat_obj)), rownames(seurat_obj@meta.data)))
   
   ### save the obj as RDS file
-  saveRDS(seurat_obj, file = "./data/PID5034/Mouse_Endo_Atlas.RDS")
+  # saveRDS(seurat_obj, file = "./data/PID5034/Mouse_Endo_Atlas.RDS")
+  
+  ### load the seurat object
+  seurat_obj <- readRDS(file = "./data/PID5034/Mouse_Endo_Atlas.RDS")
+  
+  ### factorize the tissue column
+  seurat_obj$Tissue <- factor(seurat_obj$Tissue,
+                              levels = levels(as.factor(seurat_obj$Tissue)))
   
   ### set tissue as Ident
   seurat_obj <- SetIdent(object = seurat_obj,
                          cells = rownames(seurat_obj@meta.data),
                          value = seurat_obj@meta.data$Tissue)
+  
+  ### color setting
+  tissue_colors <- colorRampPalette(colors=c("#f46d43", "#fdae61", "#fee090", "#abd9e9", "#74add1", "#4575b4"))(length(unique(seurat_obj$Tissue)))
+  names(tissue_colors) <- levels(as.factor(seurat_obj$Tissue))
   
   ### violin plot
   p <- VlnPlot(seurat_obj, features = interesting_genes,
@@ -81,11 +92,36 @@ gexp_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleTas
             axis.title.x = element_blank(),
             plot.title = element_text(hjust = 0.5, vjust = 0.5, color = "black", face = "bold"),
             axis.title = element_text(angle = 0, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
-            axis.text = element_text(angle = 90, vjust = 0.5, hjust = 1, color = "black", face = "bold"))
+            axis.text.x = element_text(angle = -90, vjust = 0.5, hjust = 0, color = "black", face = "bold"))
   }
   
   ### save the violin plot
-  ggsave(file = paste0(outputDir, "FOP_Mouse_Endo_GEXP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  ggsave(file = paste0(outputDir, "ViolinPlot_FOP_Mouse_Endo_GEXP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  
+  ### factorize the tissue column
+  seurat_obj$Tissue <- factor(seurat_obj$Tissue,
+                              levels = rev(levels(as.factor(seurat_obj$Tissue))))
+  
+  ### dot plot
+  p <- DotPlot(seurat_obj,
+               features = interesting_genes,
+               group.by = "Tissue") +
+    scale_size(range = c(5, 20)) +
+    xlab("") +
+    ylab("") +
+    scale_color_gradientn(colours = c("#313695", "#ffffbf", "#a50026")) +
+    theme_classic(base_size = 35) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.title = element_text(size = 35, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 90, size = 30, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, size = 35, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.text = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(0.7, 'cm'))
+  ggsave(file = paste0(outputDir, "DotPlot_FOP_Mouse_Endo_GEXP.pdf"),
+         plot = p, width = 20, height = 15, dpi = 350)
   
   
 }
