@@ -1,23 +1,23 @@
 ###
-#   File name : PID5137_Lineage_Analysis.R
+#   File name : PID4604_Lineage_Analysis.R
 #   Author    : Hyunjin Kim
 #   Date      : May 31, 2022
 #   Email     : hyunjin.kim2@regeneron.com
 #   Purpose   : Run monocle3 on the given single cell dataset.
 #
 #   Instruction
-#               1. Source("PID5137_Lineage_Analysis")
+#               1. Source("PID4604_Lineage_Analysis.R")
 #               2. Run the function "lineage_analysis" - specify the input file path and the output directory
 #               3. The results will be generated under the output directory
 #
 #   Example
-#               > source("The_directory_of_PID5137_Lineage_Analysis/PID5137_Lineage_Analysis")
+#               > source("The_directory_of_PID4604_Lineage_Analysis.R/PID4604_Lineage_Analysis.R")
 #               > lineage_analysis(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTasks/data/tx_fil_dim20_res250.Robj",
-#                                  outputDir="/Users/hyunjin.kim2/Documents/SimpleTasks/results/PID5137/")
+#                                  outputDir="/Users/hyunjin.kim2/Documents/SimpleTasks/results/PID4604/")
 ###
 
 lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTasks/data/tx_fil_dim20_res250.Robj",
-                             outputDir="/Users/hyunjin.kim2/Documents/SimpleTasks/results/PID5137/") {
+                             outputDir="/Users/hyunjin.kim2/Documents/SimpleTasks/results/PID4604/") {
   
   ### load libraries
   if(!require(Seurat, quietly = TRUE)) {
