@@ -36,6 +36,20 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     install.packages("ggplot2")
     require(ggplot2, quietly = TRUE)
   }
+  if(!require(igraph, quietly = TRUE)) {
+    install.packages("igraph")
+    require(igraph, quietly = TRUE)
+  }
+  if(!require(philentropy, quietly = TRUE)) {
+    install.packages("philentropy")
+    require(philentropy, quietly = TRUE)
+  }
+  if(!require(ggtree, quietly = TRUE)) {
+    if (!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("ggtree")
+    require(ggtree, quietly = TRUE)
+  }
   if(!require(monocle, quietly = TRUE)) {
     if (!requireNamespace("BiocManager", quietly = TRUE))
       install.packages("BiocManager")
@@ -858,11 +872,101 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
   ### tree representation of the overall trajectory
   ### root cluster = 5
   
-  
-  
-  
-  
-  
+  ### make a manual tree visualization function from Monocle3 object
+  show_trajectory_as_tree <- function(obj,
+                                      trace_base,
+                                      root,
+                                      reduced_dim_method = c("UMAP", "PCA"),
+                                      color_scheme = NULL) {
+    
+    ### set igraph graph
+    if(as.character(class(obj)) == "cell_data_set") {
+      igraph_grp <- obj@principal_graph[[reduced_dim_method[1]]]
+      original_adj_mat <- as.data.frame(obj@principal_graph_aux[[reduced_dim_method[1]]]$stree)
+      rownames(original_adj_mat) <- colnames(obj@principal_graph_aux[[reduced_dim_method[1]]]$dp_mst)
+      colnames(original_adj_mat) <- colnames(obj@principal_graph_aux[[reduced_dim_method[1]]]$dp_mst)
+    } else {
+      stop("ERROR: obj should be cell_data_set (Monocle3 object).")
+    }
+    
+    ### set unique trace base
+    if(is.null(levels(obj@colData[,trace_base]))) {
+      unique_trace_base <- unique(as.character(obj@colData[,trace_base]))
+    } else {
+      unique_trace_base <- levels(obj@colData[,trace_base])
+    }
+    
+    ### if a vertex is given, find the nearest trace_base of the vertex
+    ### reduced_dim cords of the trace_bases (median center of each trace_base)
+    trace_base_cords <- sapply(unique_trace_base, function(x) {
+      target_cell_list <- rownames(obj@colData)[which(obj@colData[,trace_base] == x)]
+      target_cell_cords <- obj@int_colData@listData$reducedDims[[reduced_dim_method[1]]][target_cell_list,]
+      mean_x <- median(as.numeric(target_cell_cords[,1]))
+      mean_y <- median(as.numeric(target_cell_cords[,2]))
+      
+      return(c(mean_x, mean_y))
+    })
+    
+    ### find the closest base of the given vertex
+    find_the_closest_base <- function(vtx) {
+      vtx_cords <- obj@principal_graph_aux[[reduced_dim_method[1]]]$dp_mst[,vtx]
+      dist_result <- sapply(colnames(trace_base_cords), function(x) {
+        return(euclidean(vtx_cords, trace_base_cords[,x], FALSE))
+      })
+      closest_base <- names(dist_result)[which(dist_result == min(dist_result))]
+      return(closest_base)
+    }
+    
+    ### vertex - base mapping
+    vertex_base_map <- data.frame(vertex=colnames(obj@principal_graph_aux[[reduced_dim_method[1]]]$dp_mst),
+                                  base=NA,
+                                  stringsAsFactors = FALSE, check.names = FALSE)
+    rownames(vertex_base_map) <- vertex_base_map$vertex
+    for(vtx in vertex_base_map$vertex) {
+      vertex_base_map[vtx,"base"] <- find_the_closest_base(vtx)
+    }
+    
+    ### re-construct the igraph based on the trace base
+    new_adj_mat <- matrix(0, nrow = length(unique_trace_base), ncol = length(unique_trace_base))
+    rownames(new_adj_mat) <- unique_trace_base
+    colnames(new_adj_mat) <- unique_trace_base
+    
+    for(tr_bs in unique_trace_base) {
+      ### what are the vertices that are affiliated to the given base
+      target_vertex_list <- unique(vertex_base_map$vertex[which(vertex_base_map$base == tr_bs)])
+      
+      ### get vertices that are linked to the given vertices
+      linked_vertex_list <- names(which(apply(original_dist_mat[target_vertex_list,], 2, sum) > 0))
+      
+      ### linked bases
+      linked_base_list <- unique(vertex_base_map[linked_vertex_list,"base"])
+      
+      ### remove the self-link
+      linked_base_list <- linked_base_list[which(linked_base_list != tr_bs)]
+      
+      ### fill into the new adj mat
+      new_adj_mat[tr_bs,linked_base_list] <- 1
+      new_adj_mat[linked_base_list, tr_bs] <- 1
+    }
+    
+    ### diagonal = 0 (no self-linking)
+    diag(new_adj_mat) <- 0
+    
+    
+    ### build igraph with the new adj mat
+    grp <- graph_from_adjacency_matrix(new_adj_mat)
+    
+    ###
+    plot(grp, layout = layout.reingold.tilford(grp, root="5"),
+         vertex.label.font = 2)
+    
+    a <- as_tree(grp)
+    arrow_size <- unit(rep(c(0, 3), times = c(27, 13)), "mm")
+    ggtree(a, layout='slanted', arrow = arrow(length=arrow_size)) + 
+      geom_point(size=5, color='steelblue', alpha=.6) + 
+      geom_tiplab(hjust=.5,vjust=2) + layout_dendrogram()
+    
+  }
   
   
   
