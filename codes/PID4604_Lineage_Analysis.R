@@ -44,18 +44,6 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     install.packages("philentropy")
     require(philentropy, quietly = TRUE)
   }
-  if(!require(ggtree, quietly = TRUE)) {
-    if (!requireNamespace("BiocManager", quietly = TRUE))
-      install.packages("BiocManager")
-    BiocManager::install("ggtree")
-    require(ggtree, quietly = TRUE)
-  }
-  if(!require(monocle, quietly = TRUE)) {
-    if (!requireNamespace("BiocManager", quietly = TRUE))
-      install.packages("BiocManager")
-    BiocManager::install("monocle")
-    require(monocle, quietly = TRUE)
-  }
   
   ### loads an RData file, and returns it
   loadRData <- function(fileName){
@@ -670,192 +658,6 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
   }
   
   
-  ### tree visualization function for Monocle3
-  plot_complex_cell_trajectory <- function(cds,
-                                           dim = "UMAP",
-                                           x=1, 
-                                           y=2, 
-                                           root_states = NULL,
-                                           color_by="State", 
-                                           show_tree=TRUE, 
-                                           show_backbone=TRUE, 
-                                           backbone_color="black", 
-                                           markers=NULL, 
-                                           show_cell_names=FALSE, 
-                                           cell_size=1.5,
-                                           cell_link_size=0.75,
-                                           cell_name_size=2,
-                                           show_branch_points=TRUE, 
-                                           ...){
-    gene_short_name <- NA
-    sample_name <- NA
-    data_dim_1 <- NA
-    data_dim_2 <- NA
-    
-    # need to validate cds as ready for this plot (need mst, pseudotime, etc)
-    lib_info_with_pseudo <- pData(cds)
-    
-    if (is.null(cds@reduce_dim_aux)){
-      stop("Error: dimensionality not yet reduced. Please call reduceDimension() before calling this function.")
-    }
-    
-    if(dim == "UMAP") {
-      reduced_dim_coords <- cds@reduce_dim_aux$UMAP$model$umap_model$embedding
-    } else if(dim == "PCA") {
-      reduced_dim_coords <- cds@reduce_dim_aux$PCA$model$umap_model$embedding
-    } else {
-      stop("Error: dim should be either UMAP or PCA.")
-    }
-    
-    if (is.null(reduced_dim_coords)){
-      stop("You must first call reduceDimension() before using this function")
-    }
-    
-    dp_mst <- cds@principal_graph$UMAP
-    
-    
-    if(is.null(root_states)) {
-      if(is.null(lib_info_with_pseudo$Pseudotime)){
-        root_cell <- row.names(lib_info_with_pseudo)[degree(dp_mst) == 1][1]
-      }
-      else
-        root_cell <- row.names(subset(lib_info_with_pseudo, Pseudotime == 0))
-      
-      if(cds@dim_reduce_type != "ICA")
-        root_cell <- V(dp_mst)$name[cds@auxOrderingData$DDRTree$pr_graph_cell_proj_closest_vertex[root_cell, ]] 
-      
-    }
-    else {
-      candidate_root_cells <- row.names(subset(pData(cds), State %in% root_states))
-      if(cds@dim_reduce_type == "ICA") {
-        root_cell <- candidate_root_cells[which(degree(dp_mst, candidate_root_cells) == 1)]
-      } else {
-        Y_candidate_root_cells <- V(dp_mst)$name[cds@auxOrderingData$DDRTree$pr_graph_cell_proj_closest_vertex[candidate_root_cells, ]] 
-        root_cell <- Y_candidate_root_cells[which(degree(dp_mst, Y_candidate_root_cells) == 1)]
-      }
-      
-    }
-    
-    tree_coords <- layout_as_tree(dp_mst, root=root_cell)
-    
-    #ica_space_df <- data.frame(Matrix::t(reduced_dim_coords[c(x,y),]))
-    ica_space_df <- data.frame(tree_coords)
-    row.names(ica_space_df) <- colnames(reduced_dim_coords)
-    colnames(ica_space_df) <- c("prin_graph_dim_1", "prin_graph_dim_2")
-    
-    ica_space_df$sample_name <- row.names(ica_space_df)
-    #ica_space_with_state_df <- merge(ica_space_df, lib_info_with_pseudo, by.x="sample_name", by.y="row.names")
-    #print(ica_space_with_state_df)
-    
-    
-    if (is.null(dp_mst)){
-      stop("You must first call orderCells() before using this function")
-    }
-    
-    edge_list <- as.data.frame(get.edgelist(dp_mst))
-    colnames(edge_list) <- c("source", "target")
-    
-    edge_df <- merge(ica_space_df, edge_list, by.x="sample_name", by.y="source", all=TRUE)
-    #edge_df <- ica_space_df
-    edge_df <- plyr::rename(edge_df, c("prin_graph_dim_1"="source_prin_graph_dim_1", "prin_graph_dim_2"="source_prin_graph_dim_2"))
-    edge_df <- merge(edge_df, ica_space_df[,c("sample_name", "prin_graph_dim_1", "prin_graph_dim_2")], by.x="target", by.y="sample_name", all=TRUE)
-    edge_df <- plyr::rename(edge_df, c("prin_graph_dim_1"="target_prin_graph_dim_1", "prin_graph_dim_2"="target_prin_graph_dim_2"))
-    
-    #S_matrix <- reducedDimS(cds)
-    #data_df <- data.frame(t(S_matrix[c(x,y),]))
-    
-    if(cds@dim_reduce_type == "ICA"){
-      S_matrix <- tree_coords[,] #colnames(cds)
-      
-    } else if(cds@dim_reduce_type %in% c("DDRTree", "SimplePPT", "SGL-tree")){
-      S_matrix <- tree_coords[closest_vertex,]
-      closest_vertex <- cds@auxOrderingData[["DDRTree"]]$pr_graph_cell_proj_closest_vertex
-    }
-    
-    data_df <- data.frame(S_matrix)
-    row.names(data_df) <- colnames(reducedDimS(cds))
-    colnames(data_df) <- c("data_dim_1", "data_dim_2")
-    data_df$sample_name <- row.names(data_df)
-    data_df <- merge(data_df, lib_info_with_pseudo, by.x="sample_name", by.y="row.names")
-    
-    markers_exprs <- NULL
-    if (is.null(markers) == FALSE){
-      markers_fData <- subset(fData(cds), gene_short_name %in% markers)
-      if (nrow(markers_fData) >= 1){
-        markers_exprs <- reshape2::melt(as.matrix(exprs(cds[row.names(markers_fData),])))
-        colnames(markers_exprs)[1:2] <- c('feature_id','cell_id')
-        markers_exprs <- merge(markers_exprs, markers_fData, by.x = "feature_id", by.y="row.names")
-        #print (head( markers_exprs[is.na(markers_exprs$gene_short_name) == FALSE,]))
-        markers_exprs$feature_label <- as.character(markers_exprs$gene_short_name)
-        markers_exprs$feature_label[is.na(markers_exprs$feature_label)] <- markers_exprs$Var1
-      }
-    }
-    if (is.null(markers_exprs) == FALSE && nrow(markers_exprs) > 0){
-      data_df <- merge(data_df, markers_exprs, by.x="sample_name", by.y="cell_id")
-      #print (head(edge_df))
-      g <- ggplot(data=data_df, aes(x=data_dim_1, y=data_dim_2, I(cell_size))) + facet_wrap(~feature_label)
-    }else{
-      g <- ggplot(data=data_df, aes(x=data_dim_1, y=data_dim_2)) 
-    }
-    if (show_tree){
-      g <- g + geom_segment(aes_string(x="source_prin_graph_dim_1", y="source_prin_graph_dim_2", xend="target_prin_graph_dim_1", yend="target_prin_graph_dim_2"), size=cell_link_size, linetype="solid", na.rm=TRUE, data=edge_df)
-    }
-    
-    # FIXME: setting size here overrides the marker expression funtionality. 
-    # Don't do it!
-    if (is.null(markers_exprs) == FALSE && nrow(markers_exprs) > 0){
-      if(class(data_df[, color_by]) == 'numeric') {
-        g <- g + geom_jitter(aes_string(color = paste0("log10(", color_by, " + 0.1)")), size=I(cell_size), na.rm = TRUE, height=5) + 
-          scale_color_viridis(name = paste0("log10(", color_by, ")"), ...)
-      } else {
-        g <- g + geom_jitter(aes_string(color = color_by), size=I(cell_size), na.rm = TRUE, height=5) 
-      }
-    }else {
-      if(class(data_df[, color_by]) == 'numeric') {
-        g <- g + geom_jitter(aes_string(color = paste0("log10(", color_by, " + 0.1)")), size=I(cell_size), na.rm = TRUE, height=5) + 
-          scale_color_viridis(name = paste0("log10(", color_by, " + 0.1)"), ...)
-      } else {
-        g <- g + geom_jitter(aes_string(color = color_by), size=I(cell_size), na.rm = TRUE, height=5)
-      }
-    }
-    
-    if (show_branch_points && cds@dim_reduce_type == 'DDRTree'){
-      mst_branch_nodes <- cds@auxOrderingData[[cds@dim_reduce_type]]$branch_points
-      branch_point_df <- subset(edge_df, sample_name %in% mst_branch_nodes)[,c("sample_name", "source_prin_graph_dim_1", "source_prin_graph_dim_2")]
-      branch_point_df$branch_point_idx <- match(branch_point_df$sample_name, mst_branch_nodes)
-      branch_point_df <- branch_point_df[!duplicated(branch_point_df$branch_point_idx), ]
-      
-      g <- g + geom_point(aes_string(x="source_prin_graph_dim_1", y="source_prin_graph_dim_2"), 
-                          size=2 * cell_size, na.rm=TRUE, data=branch_point_df) +
-        geom_text(aes_string(x="source_prin_graph_dim_1", y="source_prin_graph_dim_2", label="branch_point_idx"), 
-                  size=1.5 * cell_size, color="white", na.rm=TRUE, data=branch_point_df)
-    }
-    if (show_cell_names){
-      g <- g +geom_text(aes(label=sample_name), size=cell_name_size)
-    }
-    g <- g + 
-      #scale_color_brewer(palette="Set1") +
-      theme(strip.background = element_rect(colour = 'white', fill = 'white')) +
-      theme(panel.border = element_blank()) +
-      # theme(axis.line.x = element_line(size=0.25, color="black")) +
-      # theme(axis.line.y = element_line(size=0.25, color="black")) +
-      theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank()) +
-      theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_blank()) + 
-      theme(panel.background = element_rect(fill='white')) +
-      theme(legend.key=element_blank()) + 
-      xlab('') + 
-      ylab('') +
-      theme(legend.position="top", legend.key.height=grid::unit(0.35, "in")) +
-      #guides(color = guide_legend(label.position = "top")) +
-      theme(legend.key = element_blank()) +
-      theme(panel.background = element_rect(fill='white')) + 
-      theme(line = element_blank(), 
-            axis.text.x = element_blank(),
-            axis.text.y = element_blank(),
-            axis.ticks = element_blank()) 
-    g
-  }
-  
   ### load the new annotation info
   ### id - cluster#, label - annotation info
   new_anno <- read.table(file = "./data/cluster_annot.txt", header = TRUE, sep = "\t",
@@ -868,16 +670,46 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     seurat_obj$new_anno[which(seurat_obj$seurat_clusters == clstr)] <- new_anno[clstr,"label"]
   }
   
+  ### check the order of cds@colData and seurat_obj@meta.data are the same
+  identical(as.character(cds@colData$seurat_clusters), as.character(seurat_obj$seurat_clusters))
+  identical(as.character(cds@colData$sample.cel), as.character(seurat_obj$sample.cel))
+  identical(as.character(cds@colData$sample.trt), as.character(seurat_obj$sample.trt))
+  
+  ### if true, attach the new_anno to the cds object
+  cds@colData$new_anno <- as.character(seurat_obj$new_anno)
+  
+  ### plot trajectory
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "new_anno",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 7)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_annotation_ORIGINAL_UMAP.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
   
   ### tree representation of the overall trajectory
   ### root cluster = 5
   
-  ### make a manual tree visualization function from Monocle3 object
-  show_trajectory_as_tree <- function(obj,
+  ###
+  ### Make a manual tree visualization function from Monocle3 object
+  ###
+  ### obj                 : Monocle3 object
+  ### trace_base          : Basis of the trajectory; Should be one of colnames(obj@colData)
+  ### root                : Root state of the trajectory; Should be one of unique(obj@colData[,trace_base])
+  ### reduced_dim_method  : Dimensionality reduction method of the Monocle3; Should be either UMAP or PCA
+  ### color_scheme        : Color scheme for the trace_base; If NULL, default colors will be used
+  ### node_shape          : Shape of the node in the tree graph
+  ### result_path         : The path for the result file; Should be ended with .pdf (pdf file)
+  ###
+  plot_trajectory_as_tree <- function(obj,
                                       trace_base,
                                       root,
                                       reduced_dim_method = c("UMAP", "PCA"),
-                                      color_scheme = NULL) {
+                                      color_scheme = NULL,
+                                      node_shape = c("circle", "rectangle"),
+                                      result_path = "./trajectory_tree.pdf") {
     
     ### set igraph graph
     if(as.character(class(obj)) == "cell_data_set") {
@@ -936,7 +768,7 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
       target_vertex_list <- unique(vertex_base_map$vertex[which(vertex_base_map$base == tr_bs)])
       
       ### get vertices that are linked to the given vertices
-      linked_vertex_list <- names(which(apply(original_dist_mat[target_vertex_list,], 2, sum) > 0))
+      linked_vertex_list <- names(which(apply(original_adj_mat[target_vertex_list,], 2, sum) > 0))
       
       ### linked bases
       linked_base_list <- unique(vertex_base_map[linked_vertex_list,"base"])
@@ -952,22 +784,102 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     ### diagonal = 0 (no self-linking)
     diag(new_adj_mat) <- 0
     
+    ### remove nodes with no connections
+    keep_idx <- which(apply(new_adj_mat, 1, sum) > 0)
+    new_adj_mat <- new_adj_mat[keep_idx,keep_idx]
     
     ### build igraph with the new adj mat
     grp <- graph_from_adjacency_matrix(new_adj_mat)
     
-    ###
-    plot(grp, layout = layout.reingold.tilford(grp, root="5"),
-         vertex.label.font = 2)
+    #
+    ### set params for visualization
+    #
+    ### set node color
+    if(is.null(color_scheme)) {
+      V(grp)$color <- "gold"
+    } else {
+      V(grp)$color <- color_scheme[names(V(grp))]  
+    }
+    ### set node shape
+    V(grp)$shape <- node_shape[1]
+    ### set node size
+    if(node_shape == "circle") {
+      V(grp)$size <- 10
+    } else if(node_shape == "rectangle") {
+      V(grp)$size <- 25
+    }
+    ### set node label size
+    V(grp)$label.cex <- 3
+    ### set node label color
+    V(grp)$label.color <- "black"
+    ### set node label font
+    V(grp)$label.font <- 2
+    ### set edge width
+    E(grp)$width <- 3
+    ### set edge arrow size
+    E(grp)$arrow.size <- 0
+    ### set edge color
+    E(grp)$color <- "black"
     
-    a <- as_tree(grp)
-    arrow_size <- unit(rep(c(0, 3), times = c(27, 13)), "mm")
-    ggtree(a, layout='slanted', arrow = arrow(length=arrow_size)) + 
-      geom_point(size=5, color='steelblue', alpha=.6) + 
-      geom_tiplab(hjust=.5,vjust=2) + layout_dendrogram()
+    ### trajectory tree plot
+    pdf(result_path,
+        width = 25, height = 30)
+    plot.igraph(grp,
+                layout = layout.reingold.tilford(grp, root=root),
+                asp = 1.5,
+                margin = 0)
+    title(paste0("Monocle3 Trajectory Based on ", trace_base),
+          cex.main=3, col.main="black")
+    dev.off()
+    
     
   }
   
+  
+  ### get the same color scheme as the UMAP
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "seurat_clusters",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 7)
+  g <- ggplot_build(p)
+  color_sch <- unique(g$data[[2]]$colour)
+  names(color_sch) <- unique(g$plot$data$cell_color)
+  color_sch <- color_sch[order(as.numeric(names(color_sch)))]
+  
+  ### trajectory tree plot based on seurat_clusters
+  plot_trajectory_as_tree(obj = cds,
+                          trace_base = "seurat_clusters",
+                          root = "5",
+                          reduced_dim_method = "UMAP",
+                          color_scheme = color_sch,
+                          node_shape = "circle",
+                          result_path = paste0(outputDir, "Monocle3_Trajectory_Tree_Clusters.pdf"))
+  
+  
+  ### get the same color scheme as the UMAP
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "new_anno",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 7)
+  g <- ggplot_build(p)
+  color_sch <- unique(g$data[[2]]$colour)
+  names(color_sch) <- unique(g$plot$data$cell_color)
+  color_sch <- color_sch[order(names(color_sch))]
+  
+  ### trajectory tree plot based on 
+  plot_trajectory_as_tree(obj = cds,
+                          trace_base = "new_anno",
+                          root = "Mo-2",
+                          reduced_dim_method = "UMAP",
+                          color_scheme = color_sch,
+                          node_shape = "rectangle",
+                          result_path = paste0(outputDir, "Monocle3_Trajectory_Tree_New_Anno.pdf"))
   
   
 }
