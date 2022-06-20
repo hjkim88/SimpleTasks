@@ -49,6 +49,18 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   seurat_obj <- loadRData(Seurat_RObj_path)
   gc()
   
+  ### load the new annotation info
+  ### id - cluster#, label - annotation info
+  new_anno <- read.table(file = "./data/cluster_annot.txt", header = TRUE, sep = "\t",
+                         stringsAsFactors = FALSE, check.names = FALSE)
+  rownames(new_anno) <- new_anno$id
+  
+  ### annotate
+  seurat_obj$new_anno <- NA
+  for(clstr in unique(as.character(seurat_obj$seurat_clusters))) {
+    seurat_obj$new_anno[which(seurat_obj$seurat_clusters == clstr)] <- new_anno[clstr,"label"]
+  }
+  
   ### update the old seurat object to a new seurat object with the new version
   ### this has to be run because ExportToCellbrowser() needs the same seurat version
   ### between the installed seurat and the object seurat
@@ -76,12 +88,12 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
                               max.cells.per.ident = 100,
                               test.use = "wilcox")
   
-  ### top 100 DE genes only for each cluster
+  ### top 30 DE genes only for each cluster
   remove_idx <- NULL
   for(clstr in as.character(unique(de_result$cluster))) {
     clstr_idx <- which(de_result$cluster == clstr)
-    if(length(clstr_idx) > 100) {
-      remove_idx <- c(remove_idx, clstr_idx[101:length(clstr_idx)])
+    if(length(clstr_idx) > 30) {
+      remove_idx <- c(remove_idx, clstr_idx[31:length(clstr_idx)])
     }
   }
   if(length(remove_idx) > 0) {
@@ -89,11 +101,46 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   }
   
   ### save as markers.tsv
+  ### there's something weird happen if I generate this file manually
+  ### it's because of the header: just copy and paste other header to the new markers.tsv
   write.table(de_result,
               file = paste0(outputDir, "markers.tsv"),
               sep = "\t",
               col.names = NA,
               quote = FALSE)
+  
+  
+  ### since the CellBrowser didn't work with the output files
+  ### I assume that the exp mat file is too large
+  ### so I'm going to try with down-sampled version and see if it works
+  
+  ### down-sampling
+  ### make sure every seurat_cluster has at least 500 cells
+  ### if max. number is smaller than that, just keep all the cells
+  # set.seed(1234)
+  # fixed_cell_num <- 500
+  # downsampling_idx <- NULL
+  # for(clstr in levels(seurat_obj$seurat_clusters)) {
+  #   target_idx <- which(seurat_obj$seurat_clusters == clstr)
+  #   if(length(target_idx) > fixed_cell_num) {
+  #     target_idx <- sample(target_idx, fixed_cell_num)
+  #   }
+  #   
+  #   downsampling_idx <- c(downsampling_idx, target_idx)
+  # }
+  # 
+  # ### subset based on the down-sampling
+  # sub_seurat_obj <- subset(seurat_obj,
+  #                          cells = rownames(seurat_obj@meta.data)[downsampling_idx])
+  # 
+  # ### new output dir
+  # new_outputDir <- paste0(outputDir, "/downsampled/")
+  # dir.create(new_outputDir, recursive = TRUE)
+  # 
+  # ### make CellBrowser files
+  # ExportToCellbrowser(object = sub_seurat_obj,
+  #                     dir = new_outputDir)
+  
   
   ### test it internally
   # cd /Users/hyunjin.kim2/Documents/SimpleTasks/results/PID4604/CellBrowser/
