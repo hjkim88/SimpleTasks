@@ -55,6 +55,18 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
   seurat_obj <- loadRData(Seurat_RObj_path)
   gc()
   
+  ### load the new annotation info
+  ### id - cluster#, label - annotation info
+  new_anno <- read.table(file = "./data/cluster_annot.txt", header = TRUE, sep = "\t",
+                         stringsAsFactors = FALSE, check.names = FALSE)
+  rownames(new_anno) <- new_anno$id
+  
+  ### annotate
+  seurat_obj$new_anno <- NA
+  for(clstr in unique(as.character(seurat_obj$seurat_clusters))) {
+    seurat_obj$new_anno[which(seurat_obj$seurat_clusters == clstr)] <- new_anno[clstr,"label"]
+  }
+  
   ### Construct a monocle cds
   cds <- new_cell_data_set(as(seurat_obj@assays$RNA@counts, 'sparseMatrix'),
                            cell_metadata = seurat_obj@meta.data,
