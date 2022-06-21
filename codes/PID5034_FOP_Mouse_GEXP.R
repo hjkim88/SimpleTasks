@@ -107,10 +107,45 @@ gexp_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleTas
   p <- DotPlot(seurat_obj,
                features = interesting_genes,
                group.by = "Tissue") +
-    scale_size(range = c(5, 20)) +
+    scale_size(range = c(0, 20)) +
     xlab("") +
     ylab("") +
-    scale_color_gradientn(colours = c("#313695", "#ffffbf", "#a50026")) +
+    scale_color_gradientn(colours = c("white", "#a50026")) +
+    theme_classic(base_size = 35) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.title = element_text(size = 35, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = 90, size = 30, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, size = 35, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.text = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(0.7, 'cm'))
+  ggsave(file = paste0(outputDir, "DotPlot_FOP_Mouse_Endo_GEXP.pdf"),
+         plot = p, width = 20, height = 15, dpi = 350)
+  
+  
+  ### aorta tissue has nothing on Tgfbr1 in the dotplot
+  ### is it because it has no cells with the gene expression
+  ### or just the relative expression is super low?
+  aorta_Tgfbr1_gexp <- seurat_obj@assays$RNA@counts["Tgfbr1",
+                                                    rownames(seurat_obj@meta.data)[which(seurat_obj$Tissue == "aorta")]]
+  print(paste0("The number of aorta cells that express Tgfbr1 : ", length(which(aorta_Tgfbr1_gexp > 0))))
+  print(paste0("Average count of Tgfbr1 in aorta cells : ", mean(aorta_Tgfbr1_gexp)))
+  
+  ### also, the seurat dotplot gets seurat_obj@assays$RNA@data (normalized data) first,
+  ### then if scale = TRUE, average by each group and scale the normalized gexps (-2.5 to +2.5 by default)
+
+  ### it was due to the super low relative expression and the color for minimum expression is white
+  ### so change the minimum clolor to lightgrey
+  ### and change the legend title "Average Expression" to "Scaled Expression"
+  p <- DotPlot(seurat_obj,
+          features = interesting_genes,
+          group.by = "Tissue") +
+    scale_size(range = c(0, 20)) +
+    xlab("") +
+    ylab("") +
+    guides(color = guide_colorbar(title = "Scaled Expression")) +
+    scale_color_gradientn(colours = c("lightgrey", "#a50026")) +
     theme_classic(base_size = 35) +
     theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
           axis.title = element_text(size = 35, hjust = 0.5, color = "black", face = "bold"),
