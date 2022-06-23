@@ -61,6 +61,11 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
     seurat_obj$new_anno[which(seurat_obj$seurat_clusters == clstr)] <- new_anno[clstr,"label"]
   }
   
+  ### remove cells with new annotation as "-"
+  seurat_obj <- subset(seurat_obj,
+                       cells = rownames(seurat_obj@meta.data)[which(seurat_obj$new_anno != "-")])
+  
+  
   ### update the old seurat object to a new seurat object with the new version
   ### this has to be run because ExportToCellbrowser() needs the same seurat version
   ### between the installed seurat and the object seurat
@@ -70,7 +75,12 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   
   ### make CellBrowser files
   ExportToCellbrowser(object = seurat_obj,
-                      dir = outputDir)
+                      dir = outputDir,
+                      markers.n = 100,
+                      skip.markers = FALSE,
+                      skip.expr.matrix = FALSE,
+                      skip.metadata = FALSE,
+                      skip.reductions = FALSE)
   
   ### Error in -partition$avg_logFC : invalid argument to unary operator
   ### while running embedded FindAllMarkers() in ExportToCellbrowser()
@@ -85,7 +95,7 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   de_result <- FindAllMarkers(seurat_obj,
                               min.pct = 0.2,
                               logfc.threshold = 0.3,
-                              max.cells.per.ident = 100,
+                              max.cells.per.ident = 10000,
                               test.use = "wilcox")
   
   ### top 30 DE genes only for each cluster
@@ -109,6 +119,55 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
               col.names = NA,
               quote = FALSE)
   
+  
+  ### since we wants the new annotation as the basic idents, generate new ones based on new annotation; not based on seurat clusters
+  
+  ### set new_anno as Ident
+  seurat_obj <- SetIdent(object = seurat_obj,
+                         cells = rownames(seurat_obj@meta.data),
+                         value = seurat_obj@meta.data$new_anno)
+  
+  ### create new output dir
+  outputDir2 <- paste0(outputDir, "/new_anno/")
+  dir.create(outputDir2, showWarnings = FALSE, recursive = TRUE)
+  
+  ### make CellBrowser files
+  ExportToCellbrowser(object = seurat_obj,
+                      dir = outputDir2,
+                      markers.n = 100,
+                      skip.markers = FALSE,
+                      skip.expr.matrix = FALSE,
+                      skip.metadata = FALSE,
+                      skip.reductions = FALSE)
+  
+  ### there's something weird happened with markers.tsv,
+  ### so run it manually
+  de_result <- FindAllMarkers(seurat_obj,
+                              min.pct = 0.2,
+                              logfc.threshold = 0.3,
+                              max.cells.per.ident = 10000,
+                              test.use = "wilcox")
+  
+  ### top 30 DE genes only for each cluster
+  remove_idx <- NULL
+  for(clstr in as.character(unique(de_result$cluster))) {
+    clstr_idx <- which(de_result$cluster == clstr)
+    if(length(clstr_idx) > 30) {
+      remove_idx <- c(remove_idx, clstr_idx[31:length(clstr_idx)])
+    }
+  }
+  if(length(remove_idx) > 0) {
+    de_result <- de_result[-remove_idx,]
+  }
+  
+  ### save as markers.tsv
+  ### there's something weird happen if I generate this file manually
+  ### it's because of the header: just copy and paste other header to the new markers.tsv
+  write.table(de_result,
+              file = paste0(outputDir2, "markers.tsv"),
+              sep = "\t",
+              col.names = NA,
+              quote = FALSE)
   
   ### since the CellBrowser didn't work with the output files
   ### I assume that the exp mat file is too large
@@ -139,7 +198,12 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   # 
   # ### make CellBrowser files
   # ExportToCellbrowser(object = sub_seurat_obj,
-  #                     dir = new_outputDir)
+  #                     dir = new_outputDir,
+  #                     markers.n = 100,
+  #                     skip.markers = FALSE,
+  #                     skip.expr.matrix = FALSE,
+  #                     skip.metadata = FALSE,
+  #                     skip.reductions = FALSE)
   
   
   ### test it internally
