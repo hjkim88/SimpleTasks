@@ -893,5 +893,80 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
                           node_shape = "rectangle",
                           result_path = paste0(outputDir, "Monocle3_Trajectory_Tree_New_Anno.pdf"))
   
+  ### a function that finds genes that change over specific trajectory
+  ### and generates a feature plot on UMAP and a heatmap across the trajectory
+  plot_trajectory_gexp <- function(obj = cds,
+                                   trace_base,
+                                   specifix_bases = NULL,
+                                   root,
+                                   reduced_dim_method,
+                                   result_path = "./") {
+    
+  }
+  
+  ### or just use slingshot function
+  
+  ### get slingshot object
+  slingshot_obj_mnn <- slingshot(mnn_map,
+                                 clusterLabels = mnn_map_time,
+                                 start.clus = "GMP",
+                                 end.clus = "3mo")
+  slingshot_obj_mnn <- as.SlingshotDataSet(slingshot_obj_mnn)
+  
+  ### get colors for the clustering result
+  cell_colors_clust <- cell_pal(unique(mnn_map_time), hue_pal())
+  
+  ### Trajectory inference
+  png(paste0(outputDir2, "CARpos_Trajectory_Inference_Time_MNN.png"), width = 5000, height = 3000, res = 350)
+  par(mar=c(7, 7, 7, 1), mgp=c(4,1,0))
+  plot(reducedDim(slingshot_obj_mnn),
+       main=paste("CAR+ Trajectory Inference"),
+       col = cell_colors_clust[as.character(mnn_map_time)],
+       pch = 19, cex = 1, cex.lab = 3, cex.main = 3, cex.axis = 2)
+  lines(slingshot_obj_mnn, lwd = 4, type = "lineages", col = "black",
+        show.constraints = TRUE, constraints.col = cell_colors_clust)
+  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
+         pch = 19, cex = 1.5)
+  dev.off()
+  
+  ### find genes that change their expression over the course of development
+  ###  If "consecutive", then consecutive points along each lineage will be used as contrasts
+  sce <- fitGAM(counts = mnn_map_exp, sds = slingshot_obj_mnn)
+  ATres <- associationTest(sce, contrastType = "consecutive")
+  
+  ### give FDR
+  ATres <- ATres[order(ATres$pvalue),]
+  ATres$FDR <- p.adjust(p = ATres$pvalue, method = "BH")
+  
+  ### save the result
+  write.xlsx2(data.frame(Gene=rownames(ATres),
+                         ATres,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir2, "/CARpos_Trajectory_Inference_Pseudotime_DEGs_Slingshot.xlsx"),
+              sheetName = "CARpos_Trajectory_Inference_Pseudotime_DEGs_Slingshot", row.names = FALSE)
+  
+  ### get those genes from the Slingshot
+  topgenes <- rownames(ATres[order(ATres$FDR), ])[1:100]
+  pst.ord <- order(sce$slingshot$pseudotime.Lineage1, na.last = NA)
+  heatdata <- assays(sce)$counts[topgenes, pst.ord]
+  heatclus <- JCC_Seurat_Obj@meta.data[colnames(heatdata),"time2"]
+  
+  ### draw the heatmap
+  png(paste0(outputDir2, "CARpos_Trajectory_Inference_Pseudotime_DEGs_Slingshot_Heatmap.png"),
+      width = 3000, height = 3000, res = 350)
+  par(oma=c(0,3,0,3))
+  heatmap.2(log1p(heatdata), col = colorpanel(24, low = "blue", high = "red"),
+            scale = "none", dendrogram = "row", trace = "none",
+            cexRow = 0.5, key.title = "", main = "Top 100 Genes Associated With The Pseudotime",
+            Colv = FALSE, labCol = FALSE,  key.xlab = "log(Count+1)", key.ylab = "Frequency",
+            ColSideColors = cell_colors_clust[heatclus])
+  legend("left", inset = -0.1,
+         box.lty = 0, cex = 0.8,
+         title = "Time", xpd = TRUE,
+         legend=names(cell_colors_clust),
+         col=cell_colors_clust,
+         pch=15)
+  dev.off()
+  
   
 }
