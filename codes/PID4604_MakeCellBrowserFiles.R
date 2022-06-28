@@ -65,6 +65,11 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   seurat_obj <- subset(seurat_obj,
                        cells = rownames(seurat_obj@meta.data)[which(seurat_obj$new_anno != "-")])
   
+  ### Maybe there should not be '-' in Cluster column,
+  ### so change all '-' to '_'
+  seurat_obj@meta.data$new_anno <- sapply(seurat_obj$new_anno, function(x) {
+    return(paste(strsplit(x, split = "-", fixed = TRUE)[[1]], collapse = "_"))
+  })
   
   ### update the old seurat object to a new seurat object with the new version
   ### this has to be run because ExportToCellbrowser() needs the same seurat version
@@ -72,6 +77,10 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   # seurat_obj <- UpdateSeuratObject(seurat_obj)
   # gc()
   
+  ### set ident with the seurat cluster info
+  seurat_obj <- SetIdent(object = seurat_obj,
+                         cells = rownames(seurat_obj@meta.data),
+                         value = seurat_obj$seurat_clusters) 
   
   ### make CellBrowser files
   ExportToCellbrowser(object = seurat_obj,
@@ -238,6 +247,29 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   #                     skip.expr.matrix = FALSE,
   #                     skip.metadata = FALSE,
   #                     skip.reductions = FALSE)
+  
+  # ### set new_anno as Ident
+  # seurat_obj <- SetIdent(object = seurat_obj,
+  #                        cells = rownames(seurat_obj@meta.data),
+  #                        value = seurat_obj@meta.data$new_anno)
+  # 
+  # ### filter out some unnecessary columns from the meata.data
+  # seurat_obj@meta.data$new_anno <- NULL
+  # seurat_obj@meta.data$RNA_snn_res.2.5 <- NULL
+  # seurat_obj@meta.data$RNA_snn_res.0.1 <- NULL
+  # 
+  # ### new output dir
+  # new_outputDir <- paste0(outputDir2, "/test/")
+  # dir.create(new_outputDir, recursive = TRUE)
+  # 
+  # ### make CellBrowser files
+  # ExportToCellbrowser(object = seurat_obj,
+  #                     dir = new_outputDir,
+  #                     markers.n = 100,
+  #                     skip.markers = TRUE,
+  #                     skip.expr.matrix = TRUE,
+  #                     skip.metadata = FALSE,
+  #                     skip.reductions = TRUE)
   
   ### test it internally
   # cd /Users/hyunjin.kim2/Documents/SimpleTasks/results/PID4604/CellBrowser/
