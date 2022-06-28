@@ -56,9 +56,9 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   rownames(new_anno) <- new_anno$id
   
   ### annotate
-  seurat_obj$new_anno <- NA
+  seurat_obj@meta.data$new_anno <- NA
   for(clstr in unique(as.character(seurat_obj$seurat_clusters))) {
-    seurat_obj$new_anno[which(seurat_obj$seurat_clusters == clstr)] <- new_anno[clstr,"label"]
+    seurat_obj@meta.data$new_anno[which(seurat_obj$seurat_clusters == clstr)] <- new_anno[clstr,"label"]
   }
   
   ### remove cells with new annotation as "-"
@@ -98,12 +98,12 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
                               max.cells.per.ident = 10000,
                               test.use = "wilcox")
   
-  ### top 30 DE genes only for each cluster
+  ### top 100 DE genes only for each cluster
   remove_idx <- NULL
   for(clstr in as.character(unique(de_result$cluster))) {
     clstr_idx <- which(de_result$cluster == clstr)
-    if(length(clstr_idx) > 30) {
-      remove_idx <- c(remove_idx, clstr_idx[31:length(clstr_idx)])
+    if(length(clstr_idx) > 100) {
+      remove_idx <- c(remove_idx, clstr_idx[101:length(clstr_idx)])
     }
   }
   if(length(remove_idx) > 0) {
@@ -148,12 +148,12 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
                               max.cells.per.ident = 10000,
                               test.use = "wilcox")
   
-  ### top 30 DE genes only for each cluster
+  ### top 100 DE genes only for each cluster
   remove_idx <- NULL
   for(clstr in as.character(unique(de_result$cluster))) {
     clstr_idx <- which(de_result$cluster == clstr)
-    if(length(clstr_idx) > 30) {
-      remove_idx <- c(remove_idx, clstr_idx[31:length(clstr_idx)])
+    if(length(clstr_idx) > 100) {
+      remove_idx <- c(remove_idx, clstr_idx[101:length(clstr_idx)])
     }
   }
   if(length(remove_idx) > 0) {
@@ -184,7 +184,7 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   #   if(length(target_idx) > fixed_cell_num) {
   #     target_idx <- sample(target_idx, fixed_cell_num)
   #   }
-  #   
+  # 
   #   downsampling_idx <- c(downsampling_idx, target_idx)
   # }
   # 
@@ -205,6 +205,39 @@ make_files <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/SimpleTas
   #                     skip.metadata = FALSE,
   #                     skip.reductions = FALSE)
   
+  ### down-sampling2
+  ### make sure every new_anno has at least 1000 cells
+  ### if max. number is smaller than that, just keep all the cells
+  # set.seed(1234)
+  # fixed_cell_num <- 1000
+  # downsampling_idx <- NULL
+  # ordered_unique_annos <- unique(seurat_obj$new_anno)
+  # ordered_unique_annos <- ordered_unique_annos[order(ordered_unique_annos)]
+  # for(clstr in ordered_unique_annos) {
+  #   target_idx <- which(seurat_obj$new_anno == clstr)
+  #   if(length(target_idx) > fixed_cell_num) {
+  #     target_idx <- sample(target_idx, fixed_cell_num)
+  #   }
+  #   
+  #   downsampling_idx <- c(downsampling_idx, target_idx)
+  # }
+  # 
+  # ### subset based on the down-sampling
+  # sub_seurat_obj <- subset(seurat_obj,
+  #                          cells = rownames(seurat_obj@meta.data)[downsampling_idx])
+  # 
+  # ### new output dir
+  # new_outputDir <- paste0(outputDir2, "/downsampled/")
+  # dir.create(new_outputDir, recursive = TRUE)
+  # 
+  # ### make CellBrowser files
+  # ExportToCellbrowser(object = sub_seurat_obj,
+  #                     dir = new_outputDir,
+  #                     markers.n = 100,
+  #                     skip.markers = FALSE,
+  #                     skip.expr.matrix = FALSE,
+  #                     skip.metadata = FALSE,
+  #                     skip.reductions = FALSE)
   
   ### test it internally
   # cd /Users/hyunjin.kim2/Documents/SimpleTasks/results/PID4604/CellBrowser/
