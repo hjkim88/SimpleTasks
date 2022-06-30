@@ -44,6 +44,10 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     install.packages("philentropy")
     require(philentropy, quietly = TRUE)
   }
+  if(!require(rgdal, quietly = TRUE)) {
+    install.packages("rgdal")
+    require(rgdal, quietly = TRUE)
+  }
   
   ### loads an RData file, and returns it
   loadRData <- function(fileName){
@@ -884,7 +888,7 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
   names(color_sch) <- unique(g$plot$data$cell_color)
   color_sch <- color_sch[order(names(color_sch))]
   
-  ### trajectory tree plot based on 
+  ### trajectory tree plot based on the new anno
   plot_trajectory_as_tree(obj = cds,
                           trace_base = "new_anno",
                           root = "Mo-2",
@@ -892,6 +896,105 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
                           color_scheme = color_sch,
                           node_shape = "rectangle",
                           result_path = paste0(outputDir, "Monocle3_Trajectory_Tree_New_Anno.pdf"))
+  
+  
+  ### remove "-" cluster and do the analysis again
+  seurat_obj <- subset(seurat_obj,
+                       cells = rownames(seurat_obj@meta.data)[which(seurat_obj$new_anno != "-")])
+  
+  ### construct a monocle cds
+  cds <- new_cell_data_set(as(seurat_obj@assays$RNA@counts, 'sparseMatrix'),
+                           cell_metadata = seurat_obj@meta.data,
+                           gene_metadata = data.frame(gene_short_name = row.names(seurat_obj@assays$RNA@counts),
+                                                      row.names = row.names(seurat_obj@assays$RNA@counts),
+                                                      stringsAsFactors = FALSE, check.names = FALSE))
+  
+  ### overwrite the current CDS UMAP with original seurat UMAP
+  cds@int_colData@listData$reducedDims$UMAP <- seurat_obj@reductions$umap@cell.embeddings
+  
+  ### pre-process the data
+  cds <- preprocess_cds(cds, num_dim = 50)
+  
+  ### cluster the data
+  cds <- cluster_cells(cds)
+  
+  ### find all possible partitions
+  all_partitions <- unique(cds@clusters$UMAP$partitions)
+  all_partitions <- all_partitions[all_partitions != "1"]
+  
+  ### set all partitions to 1
+  cds@clusters$UMAP$partitions[cds@clusters$UMAP$partitions %in% all_partitions] <- "1"
+  
+  ### learn trajectory 
+  cds <- learn_graph(cds)
+  
+  ### plot trajectory
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "seurat_clusters",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 7)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_clusters_ORIGINAL_UMAP2.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  ### plot trajectory
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "new_anno",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 7)
+  ggsave(paste0(outputDir, "Monocle3_trajectory_annotation_ORIGINAL_UMAP2.pdf"), plot = p, width = 15, height = 10, dpi = 350)
+  
+  ### get the same color scheme as the UMAP
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "seurat_clusters",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 7)
+  g <- ggplot_build(p)
+  color_sch <- unique(g$data[[2]]$colour)
+  names(color_sch) <- unique(g$plot$data$cell_color)
+  color_sch <- color_sch[order(as.numeric(names(color_sch)))]
+  
+  ### trajectory tree plot based on seurat_clusters
+  plot_trajectory_as_tree(obj = cds,
+                          trace_base = "seurat_clusters",
+                          root = "5",
+                          reduced_dim_method = "UMAP",
+                          color_scheme = color_sch,
+                          node_shape = "circle",
+                          result_path = paste0(outputDir, "Monocle3_Trajectory_Tree_Clusters2.pdf"))
+  
+  
+  ### get the same color scheme as the UMAP
+  p <- plot_cells(cds,
+                  label_roots = FALSE,
+                  color_cells_by = "new_anno",
+                  label_groups_by_cluster = FALSE,
+                  label_leaves = FALSE,
+                  label_branch_points = FALSE,
+                  group_label_size = 7)
+  g <- ggplot_build(p)
+  color_sch <- unique(g$data[[2]]$colour)
+  names(color_sch) <- unique(g$plot$data$cell_color)
+  color_sch <- color_sch[order(names(color_sch))]
+  
+  ### trajectory tree plot based on the new anno
+  plot_trajectory_as_tree(obj = cds,
+                          trace_base = "new_anno",
+                          root = "Mo-2",
+                          reduced_dim_method = "UMAP",
+                          color_scheme = color_sch,
+                          node_shape = "rectangle",
+                          result_path = paste0(outputDir, "Monocle3_Trajectory_Tree_New_Anno2.pdf"))
+  
+  
+  
   
   ### a function that finds genes that change over specific trajectory
   ### and generates a feature plot on UMAP and a heatmap across the trajectory
