@@ -741,7 +741,7 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     if(is.null(levels(obj@colData[,trace_base]))) {
       unique_trace_base <- unique(as.character(obj@colData[,trace_base]))
     } else {
-      unique_trace_base <- levels(obj@colData[,trace_base])
+      unique_trace_base <- intersect(levels(obj@colData[,trace_base]), unique(obj@colData[,trace_base]))
     }
     
     ### if a vertex is given, find the nearest trace_base of the vertex
@@ -761,7 +761,7 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
       dist_result <- sapply(colnames(trace_base_cords), function(x) {
         return(euclidean(vtx_cords, trace_base_cords[,x], FALSE))
       })
-      closest_base <- names(dist_result)[which(dist_result == min(dist_result))]
+      closest_base <- names(dist_result)[which(dist_result == min(dist_result, na.rm = TRUE))]
       return(closest_base)
     }
     
@@ -992,8 +992,6 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
                           color_scheme = color_sch,
                           node_shape = "rectangle",
                           result_path = paste0(outputDir, "Monocle3_Trajectory_Tree_New_Anno2.pdf"))
-  
-  
   
   
   ### a function that finds genes that change over specific trajectory
