@@ -995,79 +995,185 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
   
   
   ### a function that finds genes that change over specific trajectory
-  ### and generates a feature plot on UMAP and a heatmap across the trajectory
-  plot_trajectory_gexp <- function(obj = cds,
+  ### and generates a feature plot on UMAP and a dotplot across the trajectory
+  ### use simple wilcoxn test between many comparisons to find those genes
+  ### and perform pathway analysis on the genes as well
+  ###
+  ### obj:
+  ### trace_base:
+  ### base_order:
+  ### fdr_threshold:
+  ### top_gene_num:
+  ### result_path:
+  ###
+  plot_trajectory_gexp <- function(obj,
                                    trace_base,
-                                   specifix_bases = NULL,
-                                   root,
-                                   reduced_dim_method,
+                                   base_order,
+                                   fdr_threshold = 0.05,
+                                   top_gene_num = 12,
                                    result_path = "./") {
+    
+    ### library
+    if(!require(poolr, quietly = TRUE)) {
+      install.packages("poolr")
+      require(poolr, quietly = TRUE)
+    }
+    if(!require(xlsx, quietly = TRUE)) {
+      install.packages("xlsx")
+      require(xlsx, quietly = TRUE)
+    }
+    
+    ### check obj
+    if(as.character(class(seurat_obj)) != "Seurat") {
+      stop("ERROR: obj should be a seurat object.")
+    }
+    
+    ### set unique trace base
+    if(is.null(levels(obj@meta.data[,trace_base]))) {
+      unique_trace_base <- unique(as.character(obj@meta.data[,trace_base]))
+    } else {
+      unique_trace_base <- intersect(levels(obj@meta.data[,trace_base]), unique(obj@meta.data[,trace_base]))
+    }
+    
+    ### check base_order
+    if(sum(as.numeric(base_order %in% unique_trace_base)) != length(base_order)) {
+      stop("ERROR: each base_order should be one of trace_base.")
+    }
+    
+    ### set ident with the trace_base
+    obj <- SetIdent(object = obj,
+                    cells = rownames(obj@meta.data),
+                    value = obj@meta.data[,trace_base])
+    
+    ### find genes of across the trajectory
+    de_genes <- list()
+    shared_genes <- NULL
+    cnt <- 1
+    for(i in 1:(length(base_order)-1)) {
+      de_genes[[cnt]] <- FindMarkers(obj,
+                                     ident.1 = base_order[i],
+                                     ident.2 = base_order[i+1],
+                                     min.pct = 0.1,
+                                     logfc.threshold = 0,
+                                     test.use = "wilcox",
+                                     verbose = TRUE)
+      
+      if(is.null(shared_genes)) {
+        shared_genes <- rownames(de_genes[[i]])
+      } else {
+        shared_genes <- intersect(shared_genes, rownames(de_genes[[i]]))
+      }
+      
+      names(de_genes)[cnt] <- paste(base_order[i], base_order[i+1], sep = "_vs_")
+      cnt <- cnt + 1
+    }
+    
+    ### find significantly increasing gexp and decreasing gexp
+    ### and if any one de was significant among all the comparisons across the trajectory
+    
+    ### logFC data frame
+    logFC_df <- sapply(de_genes, function(x) {
+      return(x[shared_genes, "avg_log2FC"])
+    }, USE.NAMES = TRUE)
+    rownames(logFC_df) <- shared_genes
+    logFC_df <- data.frame(logFC_df,
+                           stringsAsFactors = FALSE, check.names = FALSE)
+    
+    ### sum of the signs
+    sign_df <- apply(logFC_df, 1, function(x) {
+      return(sum(sign(x)))
+    })
+    
+    ### only sum = 3 or -3 
+    sign_df <- sign_df[union(which(sign_df == 3),
+                             which(sign_df == -3))]
+    consistent_genes <- names(sign_df)
+    
+    ### fdr data frame - only for the consistent genes across the comparisons
+    fdr_df <- sapply(de_genes, function(x) {
+      return(x[consistent_genes, "p_val_adj"])
+    }, USE.NAMES = TRUE)
+    rownames(fdr_df) <- consistent_genes
+    fdr_df <- data.frame(fdr_df,
+                         stringsAsFactors = FALSE, check.names = FALSE)
+    
+    ### select genes that show < fdr_threshold for every comparison
+    filtered_df <- apply(fdr_df, 1, function(x) {
+      return(sum(as.numeric(x < fdr_threshold)))
+    })
+    filtered_df <- filtered_df[which(filtered_df == 3)]
+    target_genes <- names(filtered_df)
+    
+    ### make a result data frame
+    result_df <- data.frame(Gene=target_genes,
+                            logFC_df[target_genes,],
+                            fdr_df[target_genes,],
+                            stringsAsFactors = FALSE, check.names = FALSE)
+    colnames(result_df)[2:(length(de_genes)+1)] <- paste0("log2FC_", colnames(result_df)[2:(length(de_genes)+1)])
+    colnames(result_df)[(length(de_genes)+2):ncol(result_df)] <- paste0("FDR_", colnames(result_df)[2:(length(de_genes)+1)])
+    
+    ### put Stouffer FDR
+    result_df$Stouffer_FDR <- apply(result_df[,(length(de_genes)+2):ncol(result_df)], 1, function(x) {
+      return(stouffer(x)$p)
+    })
+    
+    ### put total sign
+    result_df$Sign <- sign(sign_df)[result_df$Gene]
+    result_df$Sign[which(result_df$Sign == 1)] <- "+"
+    result_df$Sign[which(result_df$Sign == -1)] <- "-"
+    
+    ### order based on Stouffer FDR
+    result_df <- result_df[order(result_df$Stouffer_FDR,
+                                 result_df$Sign),]
+    
+    ### write out as an Excel file
+    write.xlsx(result_df,
+               file = paste0(result_path, "_Excel_Table.xlsx"),
+               sheetName = "DE_Table",
+               row.names = FALSE)
+    
+    ### subset only for the given base
+    temp_obj <- subset(obj,
+                       idents = base_order)
+    
+    ### set idents and the level
+    temp_obj$new_anno <- factor(temp_obj$new_anno,
+                                levels = base_order)
+    temp_obj <- SetIdent(object = temp_obj,
+                         cells = rownames(temp_obj@meta.data),
+                         value = temp_obj@meta.data[,trace_base])
+    
+    ### print out a dotplot
+    p <- DotPlot(temp_obj,
+                 features = result_df$Gene[1:top_gene_num],
+                 group.by = trace_base) +
+      scale_size(range = c(0, 20)) +
+      xlab("") +
+      ylab("") +
+      coord_flip() +
+      guides(color = guide_colorbar(title = "Scaled Expression")) +
+      scale_color_gradientn(colours = c("lightgrey", "#a50026")) +
+      theme_classic(base_size = 35) +
+      theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+            axis.title = element_text(size = 35, hjust = 0.5, color = "black", face = "bold"),
+            axis.text.x = element_text(angle = 0, size = 30, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+            axis.text.y = element_text(angle = 0, size = 35, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+            axis.text = element_text(color = "black", face = "bold"),
+            legend.title = element_text(size = 30, color = "black", face = "bold"),
+            legend.text = element_text(size = 25, color = "black", face = "bold"),
+            legend.key.size = unit(0.7, 'cm'))
+    ggsave(file = paste0(result_path, "_Dotplot.pdf"),
+           plot = p, width = 20, height = 15, dpi = 350)
+    
+    ### pathway analysis?
+    
+    ### garbage collection
+    gc()
     
   }
   
-  ### or just use slingshot function
   
-  ### get slingshot object
-  slingshot_obj_mnn <- slingshot(mnn_map,
-                                 clusterLabels = mnn_map_time,
-                                 start.clus = "GMP",
-                                 end.clus = "3mo")
-  slingshot_obj_mnn <- as.SlingshotDataSet(slingshot_obj_mnn)
   
-  ### get colors for the clustering result
-  cell_colors_clust <- cell_pal(unique(mnn_map_time), hue_pal())
-  
-  ### Trajectory inference
-  png(paste0(outputDir2, "CARpos_Trajectory_Inference_Time_MNN.png"), width = 5000, height = 3000, res = 350)
-  par(mar=c(7, 7, 7, 1), mgp=c(4,1,0))
-  plot(reducedDim(slingshot_obj_mnn),
-       main=paste("CAR+ Trajectory Inference"),
-       col = cell_colors_clust[as.character(mnn_map_time)],
-       pch = 19, cex = 1, cex.lab = 3, cex.main = 3, cex.axis = 2)
-  lines(slingshot_obj_mnn, lwd = 4, type = "lineages", col = "black",
-        show.constraints = TRUE, constraints.col = cell_colors_clust)
-  legend("bottomleft", legend = names(cell_colors_clust), col = cell_colors_clust,
-         pch = 19, cex = 1.5)
-  dev.off()
-  
-  ### find genes that change their expression over the course of development
-  ###  If "consecutive", then consecutive points along each lineage will be used as contrasts
-  sce <- fitGAM(counts = mnn_map_exp, sds = slingshot_obj_mnn)
-  ATres <- associationTest(sce, contrastType = "consecutive")
-  
-  ### give FDR
-  ATres <- ATres[order(ATres$pvalue),]
-  ATres$FDR <- p.adjust(p = ATres$pvalue, method = "BH")
-  
-  ### save the result
-  write.xlsx2(data.frame(Gene=rownames(ATres),
-                         ATres,
-                         stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir2, "/CARpos_Trajectory_Inference_Pseudotime_DEGs_Slingshot.xlsx"),
-              sheetName = "CARpos_Trajectory_Inference_Pseudotime_DEGs_Slingshot", row.names = FALSE)
-  
-  ### get those genes from the Slingshot
-  topgenes <- rownames(ATres[order(ATres$FDR), ])[1:100]
-  pst.ord <- order(sce$slingshot$pseudotime.Lineage1, na.last = NA)
-  heatdata <- assays(sce)$counts[topgenes, pst.ord]
-  heatclus <- JCC_Seurat_Obj@meta.data[colnames(heatdata),"time2"]
-  
-  ### draw the heatmap
-  png(paste0(outputDir2, "CARpos_Trajectory_Inference_Pseudotime_DEGs_Slingshot_Heatmap.png"),
-      width = 3000, height = 3000, res = 350)
-  par(oma=c(0,3,0,3))
-  heatmap.2(log1p(heatdata), col = colorpanel(24, low = "blue", high = "red"),
-            scale = "none", dendrogram = "row", trace = "none",
-            cexRow = 0.5, key.title = "", main = "Top 100 Genes Associated With The Pseudotime",
-            Colv = FALSE, labCol = FALSE,  key.xlab = "log(Count+1)", key.ylab = "Frequency",
-            ColSideColors = cell_colors_clust[heatclus])
-  legend("left", inset = -0.1,
-         box.lty = 0, cex = 0.8,
-         title = "Time", xpd = TRUE,
-         legend=names(cell_colors_clust),
-         col=cell_colors_clust,
-         pch=15)
-  dev.off()
   
   
 }
