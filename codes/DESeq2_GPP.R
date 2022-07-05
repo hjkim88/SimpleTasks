@@ -336,9 +336,6 @@ deseq2_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleT
   }
   
   
-  ### DE analysis
-  de_results <- list()
-  
   ### biomart objects
   mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
   ensembl_genes <-  rownames(gexp_data)
@@ -346,24 +343,54 @@ deseq2_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleT
                               values = ensembl_genes, mart= mart)
   rownames(ensembl_symbol_map) <- ensembl_symbol_map$ensembl_gene_id
   
-  ### run the DE analysis for [Skin: lesion/none vs non-lesional/none]
-  de_results[[1]] <- deseqWithComparisons(rCnt = gexp_data,
-                                          grp = as.character(meta_data$comp_group),
-                                          exp_class = "skin_lesion_none_NA_NA",
-                                          ctrl_class = "skin_non.lesional.site_none_NA_NA",
-                                          bat_eff = as.character(meta_data$`Characteristics[individual]`),
-                                          filtering = "ids_method",
-                                          adj_p_thresh = 1)
+  ### automatically run DE analysis for the specific comparisons
+  ###
+  ### Skin: lesion/none vs non-lesional/none
+  ### Skin: lesion/spesolimab vs lesional/none
+  ### Blood: spesolimab 1 week vs none
+  ### Blood: spesolimab 2 week vs none
+  ### Blood: spesolimab 4 week vs none
+  ###
+  comparisons <- list()
+  comparisons[[1]] <- c("skin_lesion_none_NA_NA", "skin_non.lesional.site_none_NA_NA")
+  comparisons[[2]] <- c("skin_lesion_spesolimab_1_week", "skin_lesion_none_NA_NA")
+  comparisons[[3]] <- c("blood_NA_spesolimab_1_week", "blood_NA_none_NA_NA")
+  comparisons[[4]] <- c("blood_NA_spesolimab_2_week", "blood_NA_none_NA_NA")
+  comparisons[[5]] <- c("blood_NA_spesolimab_4_week", "blood_NA_none_NA_NA")
   
-  ### annotate gene symbols for the Ensembl IDs
-  de_results[[1]]$EID <- rownames(de_results[[1]])
-  de_results[[1]] <- left_join(de_results[[1]], ensembl_symbol_map, by = c("EID"="ensembl_gene_id"))
-  de_results[[1]]$hgnc_symbol[which(de_results[[1]]$hgnc_symbol %in% c(NA, ""))] <- ""
-  de_results[[1]] <- data.frame(Ensembl_ID=de_results[[1]]$EID,
-                                Gene_Symbol=de_results[[1]]$hgnc_symbol,
-                                de_results[[1]][,-which(colnames(de_results[[1]]) %in% c("EID", "hgnc_symbol"))],
-                                stringsAsFactors = FALSE, check.names = FALSE)
+  de_results <- vector("list", length(comparisons))
+  names(de_results) <- sapply(comparisons, function(x) paste0(x[1], "_vs_", x[2]))
   
-  
+  for(comp in comparisons) {
+    
+    ### print comparison name
+    comp_name <- paste0(comp[1], "_vs_", comp[2])
+    print(comp_name)
+    
+    ## run the DE analysis for [Skin: lesion/none vs non-lesional/none]
+    de_results[[comp_name]] <- deseqWithComparisons(rCnt = gexp_data,
+                                                    grp = as.character(meta_data$comp_group),
+                                                    exp_class = as.character(comp[1]),
+                                                    ctrl_class = as.character(comp[2]),
+                                                    bat_eff = as.character(meta_data$`Characteristics[individual]`),
+                                                    filtering = "ids_method",
+                                                    adj_p_thresh = 1)
+    
+    ### annotate gene symbols for the Ensembl IDs
+    de_results[[comp_name]]$EID <- rownames(de_results[[comp_name]])
+    de_results[[comp_name]] <- left_join(de_results[[comp_name]], ensembl_symbol_map, by = c("EID"="ensembl_gene_id"))
+    de_results[[comp_name]]$hgnc_symbol[which(de_results[[comp_name]]$hgnc_symbol %in% c(NA, ""))] <- ""
+    de_results[[comp_name]] <- data.frame(Ensembl_ID=de_results[[comp_name]]$EID,
+                                          Gene_Symbol=de_results[[comp_name]]$hgnc_symbol,
+                                          de_results[[comp_name]][,-which(colnames(de_results[[comp_name]]) %in% c("EID", "hgnc_symbol"))],
+                                          stringsAsFactors = FALSE, check.names = FALSE)
+    
+    ### write out the result as an Excel file
+    write.xlsx(de_results[[comp_name]],
+               file = paste0(outputDir, "/", "DESeq2_", comp_name, ".xlsx"),
+               sheetName = comp_name,
+               row.names = FALSE)
+    
+  }
     
 }
