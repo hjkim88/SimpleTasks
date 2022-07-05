@@ -367,7 +367,7 @@ deseq2_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleT
     comp_name <- paste0(comp[1], "_vs_", comp[2])
     print(comp_name)
     
-    ## run the DE analysis for [Skin: lesion/none vs non-lesional/none]
+    ## run the DE analysis for the given comparison
     de_results[[comp_name]] <- deseqWithComparisons(rCnt = gexp_data,
                                                     grp = as.character(meta_data$comp_group),
                                                     exp_class = as.character(comp[1]),
