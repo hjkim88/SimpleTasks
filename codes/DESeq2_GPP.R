@@ -47,6 +47,8 @@ deseq2_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleT
                           header = TRUE,
                           sep = "\t",
                           stringsAsFactors = FALSE, check.names = FALSE)
+  rownames(meta_data) <- meta_data$`Source Name`
+  meta_data <- meta_data[colnames(gexp_data),]
   
   ### refine some columns in the meta data
   meta_data$`Factor Value[organism part]`[which(meta_data$`Factor Value[organism part]` %in% c("", "  ", "        "))] <- NA
@@ -151,7 +153,7 @@ deseq2_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleT
       BiocManager::install("DESeq2")
       require(DESeq2, quietly = TRUE)
     }
-    if(!require("checkmate", quietly = TRUE)) {
+    if(!require(checkmate, quietly = TRUE)) {
       install.packages("checkmate")
       require("checkmate", quietly = TRUE)
     }
@@ -242,7 +244,7 @@ deseq2_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleT
                                             count_threshold = 10,
                                             sample_percentage_threshold = 0.75)
         } else {
-          rCnt <- rCnt[rowSums(counts(rCnt))>1,]
+          rCnt <- rCnt[rowSums(rCnt)>1,]
         }
         
         ### data preparation for DE analysis
@@ -260,7 +262,7 @@ deseq2_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleT
                                             count_threshold = 10,
                                             sample_percentage_threshold = 0.75)
         } else {
-          rCnt <- rCnt[rowSums(counts(rCnt))>1,]
+          rCnt <- rCnt[rowSums(rCnt)>1,]
         }
         
         ### set names and the refererence group
