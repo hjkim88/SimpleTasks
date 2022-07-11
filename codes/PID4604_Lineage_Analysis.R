@@ -994,6 +994,141 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
                           result_path = paste0(outputDir, "Monocle3_Trajectory_Tree_New_Anno2.pdf"))
   
   
+  # ******************************************************************************************
+  # Pathway Analysis with clusterProfiler package
+  # Input: geneList     = a vector of gene Entrez IDs for pathway analysis [numeric or character]
+  #        org          = organism that will be used in the analysis ["human" or "mouse"]
+  #                       should be either "human" or "mouse"
+  #        database     = pathway analysis database (KEGG or GO) ["KEGG" or "GO"]
+  #        title        = title of the pathway figure [character]
+  #        pv_threshold = pathway analysis p-value threshold (not DE analysis threshold) [numeric]
+  #        displayNum   = the number of pathways that will be displayed [numeric]
+  #                       (If there are many significant pathways show the few top pathways)
+  #        imgPrint     = print a plot of pathway analysis [TRUE/FALSE]
+  #        dir          = file directory path of the output pathway figure [character]
+  #
+  # Output: Pathway analysis results in figure - using KEGG and GO pathways
+  #         The x-axis represents the number of DE genes in the pathway
+  #         The y-axis represents pathway names
+  #         The color of a bar indicates adjusted p-value from the pathway analysis
+  #         For Pathview Result, all colored genes are found DE genes in the pathway,
+  #         and the color indicates log2(fold change) of the DE gene from DE analysis
+  # ******************************************************************************************
+  pathwayAnalysis_CP <- function(geneList,
+                                 org,
+                                 database,
+                                 title="Pathway_Results",
+                                 pv_threshold=0.05,
+                                 displayNum=Inf,
+                                 imgPrint=TRUE,
+                                 dir="./") {
+    
+    ### load library
+    if(!require(clusterProfiler, quietly = TRUE)) {
+      if (!requireNamespace("BiocManager", quietly = TRUE))
+        install.packages("BiocManager")
+      BiocManager::install("clusterProfiler")
+      require(clusterProfiler, quietly = TRUE)
+    }
+    if(!require(ggplot2)) {
+      install.packages("ggplot2")
+      library(ggplot2)
+    }
+    
+    
+    ### collect gene list (Entrez IDs)
+    geneList <- geneList[which(!is.na(geneList))]
+    
+    if(!is.null(geneList)) {
+      ### make an empty list
+      p <- list()
+      
+      if(database == "KEGG") {
+        ### KEGG Pathway
+        kegg_enrich <- enrichKEGG(gene = geneList, organism = org, pvalueCutoff = pv_threshold)
+        
+        if(is.null(kegg_enrich)) {
+          writeLines("KEGG Result does not exist")
+          return(NULL)
+        } else {
+          kegg_enrich@result <- kegg_enrich@result[which(kegg_enrich@result$p.adjust < pv_threshold),]
+          
+          if(imgPrint == TRUE) {
+            if((displayNum == Inf) || (nrow(kegg_enrich@result) <= displayNum)) {
+              result <- kegg_enrich@result
+              description <- kegg_enrich@result$Description
+            } else {
+              result <- kegg_enrich@result[1:displayNum,]
+              description <- kegg_enrich@result$Description[1:displayNum]
+            }
+            
+            if(nrow(kegg_enrich) > 0) {
+              p[[1]] <- ggplot(result, aes(x=Description, y=Count)) + labs(x="", y="Gene Counts") + 
+                theme_classic(base_size = 30) + geom_bar(aes(fill = p.adjust), stat="identity") + coord_flip() +
+                scale_x_discrete(limits = rev(description)) +
+                guides(fill = guide_colorbar(ticks=FALSE, title="P.Val", barheight=10)) +
+                ggtitle(paste0("KEGG ", title)) +
+                theme(axis.text = element_text(size = 30))
+              
+              ggsave(file = paste0(dir, "KEGG_", title, ".png"), plot = p[[1]], width = 35, height = 15, dpi = 350)
+            } else {
+              writeLines("KEGG Result does not exist")
+            }
+          }
+          
+          return(kegg_enrich@result)
+        }
+      } else if(database == "GO") {
+        ### GO Pathway
+        if(org == "human") {
+          go_enrich <- enrichGO(gene = geneList, OrgDb = 'org.Hs.eg.db', readable = T, ont = "BP", pvalueCutoff = pv_threshold)
+        } else if(org == "mouse") {
+          go_enrich <- enrichGO(gene = geneList, OrgDb = 'org.Mm.eg.db', readable = T, ont = "BP", pvalueCutoff = pv_threshold)
+        } else {
+          go_enrich <- NULL
+          writeLines(paste("Unknown org variable:", org))
+        }
+        
+        if(is.null(go_enrich)) {
+          writeLines("GO Result does not exist")
+          return(NULL)
+        } else {
+          go_enrich@result <- go_enrich@result[which(go_enrich@result$p.adjust < pv_threshold),]
+          
+          if(imgPrint == TRUE) {
+            if((displayNum == Inf) || (nrow(go_enrich@result) <= displayNum)) {
+              result <- go_enrich@result
+              description <- go_enrich@result$Description
+            } else {
+              result <- go_enrich@result[1:displayNum,]
+              description <- go_enrich@result$Description[1:displayNum]
+            }
+            
+            if(nrow(go_enrich) > 0) {
+              p[[2]] <- ggplot(result, aes(x=Description, y=Count)) + labs(x="", y="Gene Counts") + 
+                theme_classic(base_size = 30) + geom_bar(aes(fill = p.adjust), stat="identity") + coord_flip() +
+                scale_x_discrete(limits = rev(description)) +
+                guides(fill = guide_colorbar(ticks=FALSE, title="P.Val", barheight=10)) +
+                ggtitle(paste0("GO ", title)) +
+                theme(axis.text = element_text(size = 30))
+              
+              ggsave(file = paste0(dir, "GO_", title, ".png"), plot = p[[2]], width = 35, height = 15, dpi = 350)
+            } else {
+              writeLines("GO Result does not exist")
+            }
+          }
+          
+          return(go_enrich@result)
+        }
+      } else {
+        stop("database prameter should be \"GO\" or \"KEGG\"")
+      }
+    } else {
+      writeLines("geneList = NULL")
+    }
+  }
+  
+  
   ### a function that finds genes that change over specific trajectory
   ### and generates a feature plot on UMAP and a dotplot across the trajectory
   ### use simple wilcoxn test between many comparisons to find those genes
@@ -1004,13 +1139,15 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
   ### base_order:
   ### fdr_threshold:
   ### top_gene_num:
+  ### organism: 
   ### result_path:
   ###
   plot_trajectory_gexp <- function(obj,
                                    trace_base,
                                    base_order,
                                    fdr_threshold = 0.05,
-                                   top_gene_num = 12,
+                                   top_gene_num = 20,
+                                   organism = c("human", "mouse"),
                                    result_path = "./") {
     
     ### library
@@ -1165,7 +1302,45 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     ggsave(file = paste0(result_path, "_Dotplot.pdf"),
            plot = p, width = 20, height = 15, dpi = 350)
     
-    ### pathway analysis?
+    ### get entrez ids for the genes
+    if(organism[1] == "human") {
+      if(!require(org.Hs.eg.db, quietly = TRUE)) {
+        if (!requireNamespace("BiocManager", quietly = TRUE))
+          install.packages("BiocManager")
+        BiocManager::install("org.Hs.eg.db")
+        require(org.Hs.eg.db, quietly = TRUE)
+      }
+      de_entrez_ids <- mapIds(org.Hs.eg.db,
+                              result_df$Gene[which(result_df$Stouffer_FDR < fdr_threshold)],
+                              "ENTREZID", "SYMBOL")
+      de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+    } else if(organism[1] == "mouse") {
+      if(!require(org.Mm.eg.db, quietly = TRUE)) {
+        if (!requireNamespace("BiocManager", quietly = TRUE))
+          install.packages("BiocManager")
+        BiocManager::install("org.Mm.eg.db")
+        require(org.Mm.eg.db, quietly = TRUE)
+      }
+      de_entrez_ids <- mapIds(org.Mm.eg.db,
+                              result_df$Gene[which(result_df$Stouffer_FDR < fdr_threshold)],
+                              "ENTREZID", "SYMBOL")
+      de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+    } else {
+      stop("ERRROR: orginism should be either human or mouse.")
+    }
+    
+    ### pathway analysis
+    pathway_result <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                         org = organism[1],
+                                         database = "GO",
+                                         title = paste0(basename(result_path), "_Pathway_Results"),
+                                         pv_threshold = 0.05,
+                                         displayNum = 30,
+                                         imgPrint = TRUE,
+                                         dir = paste0(dirname(result_path), "/"))
+    
+    write.xlsx(pathway_result, file = paste0(result_path, "_Pathway_Table.xlsx"),
+               row.names = FALSE, sheetName = paste0("GO_Results"))
     
     ### garbage collection
     gc()
