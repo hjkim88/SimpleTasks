@@ -36,6 +36,12 @@ gexp_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleTas
                          "Acvr1", "Acvr1b", "Acvr1c", "Acvrl1", "Bmpr1a", "Bmpr1b", "Tgfbr1",
                          "Acvr2a", "Acvr2b", "Amhr2", "Bmpr2", "Tgfbr2")
   
+  ### second set of genes
+  interesting_genes2 <- read.table(file = "/Users/hyunjin.kim2/Documents/SimpleTasks/data/PID5034/gsym.txt",
+                                   header = TRUE, sep = "\t",
+                                   stringsAsFactors = FALSE, check.names = FALSE)
+  interesting_genes2 <- rev(interesting_genes2$gsym)
+  
   ### load files
   gexp <- read.table(file = gexp_mat_path,
                      header = TRUE, sep = "\t",
@@ -127,10 +133,10 @@ gexp_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleTas
   ### aorta tissue has nothing on Tgfbr1 in the dotplot
   ### is it because it has no cells with the gene expression
   ### or just the relative expression is super low?
-  aorta_Tgfbr1_gexp <- seurat_obj@assays$RNA@counts["Tgfbr1",
-                                                    rownames(seurat_obj@meta.data)[which(seurat_obj$Tissue == "aorta")]]
-  print(paste0("The number of aorta cells that express Tgfbr1 : ", length(which(aorta_Tgfbr1_gexp > 0))))
-  print(paste0("Average count of Tgfbr1 in aorta cells : ", mean(aorta_Tgfbr1_gexp)))
+  # aorta_Tgfbr1_gexp <- seurat_obj@assays$RNA@counts["Tgfbr1",
+  #                                                   rownames(seurat_obj@meta.data)[which(seurat_obj$Tissue == "aorta")]]
+  # print(paste0("The number of aorta cells that express Tgfbr1 : ", length(which(aorta_Tgfbr1_gexp > 0))))
+  # print(paste0("Average count of Tgfbr1 in aorta cells : ", mean(aorta_Tgfbr1_gexp)))
   
   ### also, the seurat dotplot gets seurat_obj@assays$RNA@data (normalized data) first,
   ### then if scale = TRUE, average by each group and scale the normalized gexps (-2.5 to +2.5 by default)
@@ -157,6 +163,28 @@ gexp_analysis <- function(gexp_mat_path="/Users/hyunjin.kim2/Documents/SimpleTas
           legend.key.size = unit(0.7, 'cm'))
   ggsave(file = paste0(outputDir, "DotPlot_FOP_Mouse_Endo_GEXP.pdf"),
          plot = p, width = 20, height = 15, dpi = 350)
+  
+  ### new dotplot with interesting_genes2
+  p <- DotPlot(seurat_obj,
+               features = interesting_genes2,
+               group.by = "Tissue") +
+    scale_size(range = c(0, 20)) +
+    xlab("") +
+    ylab("") +
+    coord_flip() +
+    guides(color = guide_colorbar(title = "Scaled Expression")) +
+    scale_color_gradientn(colours = c("lightgrey", "#a50026")) +
+    theme_classic(base_size = 35) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.title = element_text(size = 35, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = -60, size = 30, vjust = 0.5, hjust = 0, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, size = 35, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.text = element_text(color = "black", face = "bold"),
+          legend.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.text = element_text(size = 25, color = "black", face = "bold"),
+          legend.key.size = unit(0.7, 'cm'))
+  ggsave(file = paste0(outputDir, "DotPlot_FOP_Mouse_Endo_GEXP2.pdf"),
+         plot = p, width = 20, height = 30, dpi = 350)
   
   
 }
