@@ -35,6 +35,10 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
     install.packages("data.table")
     require(data.table, quietly = TRUE)
   }
+  if(!require(ggplot2, quietly = TRUE)) {
+    install.packages("ggplot2")
+    require(ggplot2, quietly = TRUE)
+  }
   
   ### convert h5ad to h5seurat and load
   SeuratDisk::Convert(source = h5ad_file_path, dest = "h5seurat", overwrite = TRUE)
@@ -207,12 +211,18 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
   seurat_obj$treatment[grep(pattern = "REGN3892", seurat_obj$meta_tissue)] <- "Ctrl_ncADC"
   seurat_obj$treatment[grep(pattern = "REGN4323", seurat_obj$meta_tissue)] <- "MSR1_ncADC"
   
+  plot(density(seurat_obj@assays$RNA@data["Msr1",]),
+       main = "Normalized Expression of Msr1",
+       xlab = "Normalized Expression")
   plot(density(seurat_obj@assays$RNA@scale.data["Msr1",]),
        main = "Scaled Expression of Msr1",
        xlab = "Scaled Expression")
   
   seurat_obj$Msr1 <- "Msr1_Neg"
   seurat_obj@meta.data[colnames(seurat_obj@assays$RNA@scale.data)[which(seurat_obj@assays$RNA@scale.data["Msr1",] > 0)],"Msr1"] <- "Msr1_Pos"
+  
+  # > max(seurat_obj@assays$RNA@data["Msr1",which(seurat_obj$Msr1 == "Msr1_Neg")])
+  # [1] 0.1812776
   
   ### test the umap plot
   DimPlot(seurat_obj,
@@ -223,7 +233,133 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
   saveRDS(seurat_obj,
           file = "/Users/hyunjin.kim2/Documents/SimpleTasks/results/PID5202/MSR1/concat_gex_new.rds")
   
+  ### load the most updated seurat object
+  seurat_obj <- readRDS("/Users/hyunjin.kim2/Documents/SimpleTasks/results/PID5202/MSR1/concat_gex_new.rds")
   
+  ### check some things
+  print(identical(rownames(seurat_obj@assays$RNA@counts), rownames(seurat_obj@assays$RNA@data)))
+  print(identical(rownames(seurat_obj@assays$RNA@counts), rownames(seurat_obj@assays$RNA@scale.data)))
+  print(identical(colnames(seurat_obj@assays$RNA@counts), colnames(seurat_obj@assays$RNA@data)))
+  print(identical(colnames(seurat_obj@assays$RNA@counts), colnames(seurat_obj@assays$RNA@scale.data)))
+  print(identical(rownames(seurat_obj@meta.data), colnames(seurat_obj@assays$RNA@counts)))
+  
+  ### compare the changes in frequencies of MSR1+ (representing the macrophages) and MSR- peritoneal macrophages
+  ### in response to PBS/LPS, Dexamethasone/LPS, MSR1-ncADC/LPS and Isotype Ctrl-ncADC/LPS treatments
+  ### bar plot with Msr1+ cell #
+  ### multiple box/violin plots with p-values (Msr1 expression)
+  
+  ### annotate more
+  seurat_obj$new_group1 <- paste(seurat_obj$treatment, seurat_obj$time, sep = ".")
+  seurat_obj$new_group2 <- paste(seurat_obj$treatment, seurat_obj$time, seurat_obj$Msr1, sep = ".")
+  
+  ### frequency table
+  plot_df <- data.frame(Group=unique(seurat_obj$new_group2),
+                        Cell_Num=0,
+                        stringsAsFactors = FALSE, check.names = FALSE)
+  for(i in 1:nrow(plot_df)) {
+    plot_df$Cell_Num[i] <- length(which(seurat_obj$new_group2 == plot_df$Group[i]))
+  }
+  plot_df$Group1 <- sapply(plot_df$Group, function(x) {
+    return(strsplit(x, split = ".", fixed = TRUE)[[1]][1])
+  })
+  plot_df$Group2 <- sapply(plot_df$Group, function(x) {
+    return(strsplit(x, split = ".", fixed = TRUE)[[1]][2])
+  })
+  plot_df$Group3 <- sapply(plot_df$Group, function(x) {
+    return(strsplit(x, split = ".", fixed = TRUE)[[1]][3])
+  })
+  plot_df$Group4 <- paste(plot_df$Group1, plot_df$Group2, sep = ".")
+  
+  ### set some levels
+  plot_df$Group4 <- factor(plot_df$Group4, levels = rev(c("PBS.2HR_PRIOR_TO_LPS",
+                                                          "Steroid.2HR_PRIOR_TO_LPS",
+                                                          "Steroid.24HR_PRIOR_TO_LPS",
+                                                          "MSR1_ncADC.24HR_PRIOR_TO_LPS",
+                                                          "Ctrl_ncADC.24HR_PRIOR_TO_LPS",
+                                                          "PBS.NO_LPS")))
+  plot_df$Group3 <- factor(plot_df$Group3, levels = c("Msr1_Neg",
+                                                      "Msr1_Pos"))
+  
+  ### bar plot
+  p <- ggplot(data=plot_df, aes_string(x="Group4", y="Cell_Num", fill="Group3", label="Cell_Num")) +
+    geom_bar(position = position_dodge(), stat = "identity") +
+    ggtitle("") +
+    xlab("") + ylab("The Number of Cells") +
+    coord_flip() +
+    geom_text(aes_string(x="Group4", y="Cell_Num", label = "Cell_Num"),
+              position = position_dodge(1), hjust = 1.1,
+              size = 10, color = "black") +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, NA)) +
+    scale_fill_manual(values = c("#f46d43", "#74add1"),
+                      breaks = c("Msr1_Pos", "Msr1_Neg")) +
+    theme_classic(base_size = 30) +
+    theme(plot.title = element_text(hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_blank(),
+          axis.text.y = element_text(angle = 0, size = 30, vjust = 0.5, hjust = 1, color = "black", face = "bold"),
+          axis.title = element_text(size = 30, color = "black", face = "bold"),
+          legend.position = "top",
+          legend.title = element_blank(),
+          legend.text = element_text(size = 30, color = "black", face = "bold"),
+          legend.key.size = unit(1, 'cm'),
+          axis.ticks = element_blank())
+  ggsave(file = paste0(outputDir, "Barplot_PID5202_Msr1_Frequencies.pdf"), plot = p,
+         width = 20, height = 10, dpi = 330)
+  
+  ### set levels of new_group2
+  seurat_obj$new_group2 <- factor(seurat_obj$new_group2,
+                                  levels = c("PBS.2HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "PBS.2HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "Steroid.2HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "Steroid.2HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "Steroid.24HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "Steroid.24HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "MSR1_ncADC.24HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "MSR1_ncADC.24HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "Ctrl_ncADC.24HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "Ctrl_ncADC.24HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "PBS.NO_LPS.Msr1_Pos",
+                                             "PBS.NO_LPS.Msr1_Neg"))
+  
+  ### color scale
+  plot_colors <- colorRampPalette(c("#d73027", "#fee090", "#4575b4"))(length(levels(seurat_obj$new_group2)))
+  names(plot_colors) <- levels(seurat_obj$new_group2)
+  
+  ### violin plot of Msr1 EXP among the groups
+  seurat_obj <- SetIdent(object = seurat_obj,
+                         cells = rownames(seurat_obj@meta.data),
+                         value = seurat_obj$new_group2)
+  p <- VlnPlot(seurat_obj, features = "rna_Msr1",
+               raster = TRUE, pt.size = 0,
+               cols = plot_colors)
+  p[[1]] <- p[[1]] + geom_boxplot(width=0.1) +
+    # stat_compare_means(size = 8) +
+    xlab("") +
+    ylab("Normalized Expression") +
+    ggtitle("Msr1 Expression") +
+    stat_summary(fun=mean, geom="point", size=3, color="black") +
+    theme_classic(base_size = 40) +
+    theme(legend.key.size = unit(3, 'cm'),
+          legend.position = "none",
+          legend.title = element_text(angle = 0, size = 30, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          legend.text = element_text(angle = 0, size = 25, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 35, color = "black", face = "bold"),
+          plot.subtitle = element_text(hjust = 0.5, vjust = 0.5, size = 25, color = "black", face = "bold"),
+          axis.title = element_text(angle = 0, size = 30, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"),
+          axis.text.x = element_text(angle = -70, size = 15, vjust = 0.5, hjust = 0, color = "black", face = "bold"),
+          axis.text.y = element_text(angle = 0, size = 25, vjust = 0.5, hjust = 0.5, color = "black", face = "bold"))
+  
+  ### save the violin plot
+  ggsave(file = paste0(outputDir, "Vlnplot_PID5202_Msr1_Frequencies.pdf"), plot = p, width = 20, height = 15, dpi = 350)
+  
+  
+  ### define and compare the transcriptional signature
+  ### in MSR+ and MSR- peritoneal cells with Dexamethasone/LPS treatment (in comparison to PBS/LPS);
+  ###
+  ### define and compare the transcriptional signature in MSR+ peritoneal cells with PBS/LPS, Dexamethasone/LPS,
+  ### MSR1-ncADC/LPS and Isotype Ctrl-ncADC/LPS treatments; compare the transcriptional signature
+  ### in MSR1+ and MSR- peritoneal cells with MSR1-ncADC/LPS and Isotype Ctrl-ncADC/LPS treatments, if any.
+  
+  ###
   
   
   # ### load the raw counts
