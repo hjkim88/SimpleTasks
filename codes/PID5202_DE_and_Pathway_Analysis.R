@@ -53,6 +53,10 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
     install.packages("msigdbr")
     library(msigdbr, quietly = TRUE)
   }
+  if(!require(scales, quietly = TRUE)) {
+    install.packages("scales")
+    require(scales, quietly = TRUE)
+  }
   
   ### convert h5ad to h5seurat and load
   SeuratDisk::Convert(source = h5ad_file_path, dest = "h5seurat", overwrite = TRUE)
@@ -233,7 +237,7 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
        xlab = "Scaled Expression")
   
   seurat_obj$Msr1 <- "Msr1_Neg"
-  seurat_obj@meta.data[colnames(seurat_obj@assays$RNA@scale.data)[which(seurat_obj@assays$RNA@scale.data["Msr1",] > 0)],"Msr1"] <- "Msr1_Pos"
+  seurat_obj@meta.data[colnames(seurat_obj@assays$RNA@data)[which(seurat_obj@assays$RNA@data["Msr1",] > 0)],"Msr1"] <- "Msr1_Pos"
   
   # > max(seurat_obj@assays$RNA@data["Msr1",which(seurat_obj$Msr1 == "Msr1_Neg")])
   # [1] 0.1812776
@@ -257,14 +261,62 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
   print(identical(colnames(seurat_obj@assays$RNA@counts), colnames(seurat_obj@assays$RNA@scale.data)))
   print(identical(rownames(seurat_obj@meta.data), colnames(seurat_obj@assays$RNA@counts)))
   
+  ### annotate more
+  seurat_obj$new_group1 <- paste(seurat_obj$treatment, seurat_obj$time, sep = ".")
+  seurat_obj$new_group2 <- paste(seurat_obj$treatment, seurat_obj$time, seurat_obj$Msr1, sep = ".")
+  
+  ### UMAP plot with some annotations
+  umap_labels <- c("time", "treatment", "Msr1", "new_group1", "new_group2")
+  for(label_col in umap_labels) {
+    p <- DimPlot(object = seurat_obj, reduction = "umap",
+                 group.by = label_col,
+                 pt.size = 1) +
+      ggtitle("") +
+      labs(color="") +
+      scale_color_viridis_d() +
+      theme_classic(base_size = 40) +
+      theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 48, color = "black", face = "bold"),
+            axis.text = element_text(size = 48, color = "black", face = "bold"),
+            axis.title = element_text(size = 48, color = "black", face = "bold"),
+            legend.title = element_text(size = 30, color = "black", face = "bold"),
+            legend.text = element_text(size = 24, color = "black", face = "bold")) +
+      guides(colour = guide_legend(override.aes = list(size=10)))
+    p[[1]]$layers[[1]]$aes_params$alpha <- 1
+    ggsave(paste0(outputDir, "UMAP_PID5202_", label_col, ".pdf"), plot = p, width = 20, height = 15, dpi = 350)
+    
+    if(length(unique(seurat_obj@meta.data[,label_col])) > 8) {
+      ncol <- 3
+      label_size <- 12
+    } else {
+      ncol <- 2
+      label_size <- 20
+    }
+    p <- DimPlot(object = seurat_obj, reduction = "umap",
+                 group.by = label_col,
+                 split.by = label_col,
+                 pt.size = 1,
+                 ncol = ncol) +
+      ggtitle("") +
+      labs(color="") +
+      scale_color_viridis_d() +
+      theme_classic(base_size = label_size) +
+      theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 48, color = "black", face = "bold"),
+            axis.text = element_text(size = 30, color = "black", face = "bold"),
+            axis.title = element_text(size = 40, color = "black", face = "bold"),
+            legend.title = element_text(size = 30, color = "black", face = "bold"),
+            legend.text = element_text(size = 24, color = "black", face = "bold")) +
+      guides(colour = guide_legend(override.aes = list(size=10)))
+    p[[1]]$layers[[1]]$aes_params$alpha <- 1
+    ggsave(paste0(outputDir, "UMAP_PID5202_", label_col, "_SPLIT.pdf"), plot = p, width = 20, height = 15, dpi = 350)
+  }
+  
+  ### information table
+  
+  
   ### compare the changes in frequencies of MSR1+ (representing the macrophages) and MSR- peritoneal macrophages
   ### in response to PBS/LPS, Dexamethasone/LPS, MSR1-ncADC/LPS and Isotype Ctrl-ncADC/LPS treatments
   ### bar plot with Msr1+ cell #
   ### multiple box/violin plots with p-values (Msr1 expression)
-  
-  ### annotate more
-  seurat_obj$new_group1 <- paste(seurat_obj$treatment, seurat_obj$time, sep = ".")
-  seurat_obj$new_group2 <- paste(seurat_obj$treatment, seurat_obj$time, seurat_obj$Msr1, sep = ".")
   
   ### frequency table
   plot_df <- data.frame(Group=unique(seurat_obj$new_group2),
@@ -613,8 +665,14 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
       gsea_result <- data.frame(fgseaMultilevel(pathways = gene_list, stats = signature[[1]], minSize = -Inf, maxSize = Inf))
     }
     
+    ### order GSEA by FDR
+    gsea_result <- gsea_result[order(gsea_result$padj, gsea_result$pval),]
+    
     ### print GSEA plot
     sIdx <- which(gsea_result$padj < fdr_cutoff)
+    if(length(sIdx) > 100) {
+      sIdx <- sIdx[1:100]
+    }
     if(printPlot && length(sIdx) > 0) {
       for(i in sIdx) {
         ### get required values ready
@@ -788,14 +846,16 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
                         "PBS.NO_LPS.Msr1_Neg")
   
   ### set empy list of the results
-  de_result <- vector("list", length = 10)
-  pathway_result <- vector("list", length = 10)
-  gsea_result <- vector("list", length = 10)
+  de_results <- vector("list", length = 10)
+  pathway_results <- vector("list", length = 10)
+  gsea_results <- vector("list", length = 10)
   
   ### GSEA db preparation
   ### MSIGDB
   m_df <- msigdbr(species = "Mus musculus")
   m_list <- m_df %>% split(x = .$gene_symbol, f = .$gs_name)
+  rm(m_df)
+  gc()
   
   ### set idents
   seurat_obj <- SetIdent(object = seurat_obj,
@@ -810,16 +870,16 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
     dir.create(paste0(outputDir2, "GSEA"), recursive = TRUE)
     
     ### DE analysis
-    de_result[[i]] <- FindMarkers(seurat_obj,
-                                  ident.1 = comparisons[[i]][1],
-                                  ident.2 = comparisons[[i]][2],
-                                  min.pct = 0.1,
-                                  logfc.threshold = 0.1,
-                                  test.use = "wilcox")
+    de_results[[i]] <- FindMarkers(seurat_obj,
+                                   ident.1 = comparisons[[i]][1],
+                                   ident.2 = comparisons[[i]][2],
+                                   min.pct = 0.1,
+                                   logfc.threshold = 0.1,
+                                   test.use = "wilcox")
     
     ### write out the DE result
-    write.xlsx2(data.frame(Gene=rownames(de_result[[i]]),
-                           de_result[[i]],
+    write.xlsx2(data.frame(Gene=rownames(de_results[[i]]),
+                           de_results[[i]],
                            stringsAsFactors = FALSE, check.names = FALSE),
                 file = paste0(outputDir2, "/DE_Results_",
                               comparisons[[i]][1], "_vs_",
@@ -832,8 +892,8 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
                               idents = c(comparisons[[i]][1], comparisons[[i]][2]))
     temp_seurat_obj$new_group2 <- factor(as.character(temp_seurat_obj$new_group2),
                                          levels = c(comparisons[[i]][1], comparisons[[i]][2]))
-    top_and_bottom_genes <- rownames(de_result[[i]])[c(which(de_result[[i]]$avg_log2FC < 0)[1:10],
-                                                       which(de_result[[i]]$avg_log2FC > 0)[1:10])]
+    top_and_bottom_genes <- rownames(de_results[[i]])[c(which(de_results[[i]]$avg_log2FC < 0)[1:10],
+                                                        which(de_results[[i]]$avg_log2FC > 0)[1:10])]
     
     ### print out the dotplot
     p <- DotPlot(temp_seurat_obj,
@@ -862,40 +922,43 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
     ### get entrez ids for the genes
     ### up-regulated in treatment only
     de_entrez_ids <- mapIds(org.Mm.eg.db,
-                            rownames(de_result[[i]])[intersect(which(de_result[[i]]$p_val_adj < 0.01),
-                                                               which(de_result[[i]]$avg_log2FC > 0))],
+                            rownames(de_results[[i]])[intersect(which(de_results[[i]]$p_val_adj < 0.01),
+                                                                which(de_results[[i]]$avg_log2FC > 0))],
                             "ENTREZID", "SYMBOL")
     de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
     
     ### pathway analysis
-    pathway_result[[i]] <- pathwayAnalysis_CP(geneList = de_entrez_ids,
-                                              org = "mouse",
-                                              database = "GO",
-                                              title = paste0("Pathway_",
-                                                             comparisons[[i]][1], "_vs_",
-                                                             comparisons[[i]][2]),
-                                              pv_threshold = 0.05,
-                                              displayNum = 30,
-                                              imgPrint = TRUE,
-                                              dir = paste0(outputDir2, "/"))
-    write.xlsx(pathway_result[[i]], file = paste0(outputDir2, "/Pathway_Table_",
-                                                  comparisons[[i]][1], "_vs_",
-                                                  comparisons[[i]][2], ".xlsx"),
+    pathway_results[[i]] <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                               org = "mouse",
+                                               database = "GO",
+                                               title = paste0("Pathway_",
+                                                              comparisons[[i]][1], "_vs_",
+                                                              comparisons[[i]][2]),
+                                               pv_threshold = 0.05,
+                                               displayNum = 30,
+                                               imgPrint = TRUE,
+                                               dir = paste0(outputDir2, "/"))
+    write.xlsx(pathway_results[[i]], file = paste0(outputDir2, "/Pathway_Table_",
+                                                   comparisons[[i]][1], "_vs_",
+                                                   comparisons[[i]][2], ".xlsx"),
                row.names = FALSE, sheetName = paste0("GO_Results"))
     
     ### GSEA
-    signat <- de_result[[i]]$avg_log2FC
-    names(signat) <- rownames(de_result[[i]])
-    gsea_result[[i]] <- run_gsea(gene_list = m_list, signature = list(signat),
-                                 fdr_cutoff = 0.05,
-                                 printPlot = TRUE, printPath = paste0(outputDir2, "/GSEA/"))
-    gsea_result[[i]] <- gsea_result[[i]][order(gsea_result[[i]]$padj),]
+    signat <- de_results[[i]]$avg_log2FC
+    names(signat) <- rownames(de_results[[i]])
+    gsea_results[[i]] <- run_gsea(gene_list = m_list, signature = list(signat),
+                                  fdr_cutoff = 0.05,
+                                  printPlot = TRUE, printPath = paste0(outputDir2, "/GSEA/"))
+    gsea_results[[i]] <- gsea_results[[i]][order(gsea_results[[i]]$padj),]
     
     ### write out the result file
-    write.xlsx2(gsea_result[[i]], file = paste0(outputDir2, "/GSEA_Table_",
+    write.xlsx2(gsea_results[[i]], file = paste0(outputDir2, "/GSEA_Table_",
                                                 comparisons[[i]][1], "_vs_",
                                                 comparisons[[i]][2], ".xlsx"),
                 sheetName = "GSEA_Results", row.names = FALSE)
+    
+    ### garbage collection
+    gc()
     
   }
   
