@@ -311,6 +311,61 @@ some_analyses <- function(h5ad_file_path="/Users/hyunjin.kim2/Documents/SimpleTa
   }
   
   ### information table
+  ### number of cells
+  ### avg expressed gene # per cell
+  ### top 5 marker genes
+  ### based on new_group2
+  
+  ### find all markers
+  seurat_obj$new_group2 <- factor(seurat_obj$new_group2,
+                                  levels = c("PBS.2HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "PBS.2HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "Steroid.2HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "Steroid.2HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "Steroid.24HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "Steroid.24HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "MSR1_ncADC.24HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "MSR1_ncADC.24HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "Ctrl_ncADC.24HR_PRIOR_TO_LPS.Msr1_Pos",
+                                             "Ctrl_ncADC.24HR_PRIOR_TO_LPS.Msr1_Neg",
+                                             "PBS.NO_LPS.Msr1_Pos",
+                                             "PBS.NO_LPS.Msr1_Neg"))
+  seurat_obj <- SetIdent(object = seurat_obj,
+                         cells = rownames(seurat_obj@meta.data),
+                         value = seurat_obj$new_group2)
+  all_markers <- FindAllMarkers(seurat_obj,
+                                min.pct = 0.2,
+                                logfc.threshold = 0.5,
+                                test.use = "wilcox")
+  
+  ### write out the DE result
+  write.xlsx2(data.frame(Gene=rownames(all_markers),
+                         all_markers,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "/Markers_PID5202.xlsx"),
+              sheetName = "All_Markers", row.names = FALSE)
+  
+  ### make an info table
+  info_table <- data.frame(Group = levels(seurat_obj$new_group2),
+                           Cell_Num = sapply(levels(seurat_obj$new_group2), function(x) {
+                             return(length(which(seurat_obj$new_group2 == x)))
+                           }),
+                           Avg_Gene_Num = sapply(levels(seurat_obj$new_group2), function(x) {
+                             target_mat <- seurat_obj@assays$RNA@counts[,which(seurat_obj$new_group2 == x)]
+                             expressed_gene_num <- apply(target_mat, 2, function(y) {
+                               return(length(which(y > 0)))
+                             })
+                             return(mean(expressed_gene_num))
+                           }),
+                           Markers = sapply(levels(seurat_obj$new_group2), function(x) {
+                             top_genes <- paste(all_markers$gene[which(all_markers$cluster == x)][1:5], collapse = ";")
+                             return(top_genes)
+                           }),
+                           stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### write out the info table
+  write.xlsx2(info_table, file = paste0(outputDir, "/Info_Table_PID5202.xlsx"),
+              sheetName = "Info", row.names = FALSE)
   
   
   ### compare the changes in frequencies of MSR1+ (representing the macrophages) and MSR- peritoneal macrophages
