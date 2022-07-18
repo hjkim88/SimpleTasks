@@ -48,6 +48,10 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     install.packages("rgdal")
     require(rgdal, quietly = TRUE)
   }
+  if(!require(xlsx, quietly = TRUE)) {
+    install.packages("xlsx")
+    require(xlsx, quietly = TRUE)
+  }
   
   ### loads an RData file, and returns it
   loadRData <- function(fileName){
@@ -1134,13 +1138,14 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
   ### use simple wilcoxn test between many comparisons to find those genes
   ### and perform pathway analysis on the genes as well
   ###
-  ### obj:
-  ### trace_base:
-  ### base_order:
-  ### fdr_threshold:
-  ### top_gene_num:
-  ### organism: 
-  ### result_path:
+  ### obj: seurat object
+  ### trace_base: a column in the meta.data that the user is interested in
+  ### base_order: a lineage order that the user wants to dig in
+  ### fdr_threshold: differential expression threshold
+  ### top_gene_num: the number of top genes that will be used in the dotplot for visualization
+  ### organism: human or mouse
+  ### result_path: the path of the result; must include file title as well (no extensions)
+  ###              e.g., /usr/hkim29/file_title
   ###
   plot_trajectory_gexp <- function(obj,
                                    trace_base,
@@ -1161,7 +1166,7 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     }
     
     ### check obj
-    if(as.character(class(seurat_obj)) != "Seurat") {
+    if(as.character(class(obj)) != "Seurat") {
       stop("ERROR: obj should be a seurat object.")
     }
     
@@ -1346,6 +1351,63 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
     gc()
     
   }
+  
+  ### Mo-4 -> Mo-5 -> cDC2-1 -> cDC2-5
+  plot_trajectory_gexp(obj = seurat_obj,
+                       trace_base = "new_anno",
+                       base_order = c("Mo-4", "Mo-5", "cDC2-1", "cDC2-5"),
+                       fdr_threshold = 0.01,
+                       top_gene_num = 20,
+                       organism = "mouse",
+                       result_path = paste0(outputDir, "/Mo-4_To_cDC2-5"))
+  
+  
+  ### Mo-6 vs cDC2-1
+  ### DE amd pathway analysis
+  
+  ### set idents
+  seurat_obj <- SetIdent(object = seurat_obj,
+                         cells = rownames(seurat_obj@meta.data),
+                         value = seurat_obj$new_anno)
+  
+  ### Mo-6 vs cDC2-1
+  de_result <- FindMarkers(seurat_obj,
+                           ident.1 = "Mo-6",
+                           ident.2 = "cDC2-1",
+                           min.pct = 0.1,
+                           logfc.threshold = 0.1,
+                           test.use = "wilcox")
+  
+  ### write out the DE result
+  write.xlsx2(data.frame(Gene=rownames(de_result),
+                         de_result,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "/PID4604_MO-6_vs_cDC2-1.xlsx"),
+              sheetName = "DE_MO-6_vs_cDC2-1", row.names = FALSE)
+  
+  ### Convert symbols to Entrez IDs
+  de_entrez_ids <- mapIds(org.Mm.eg.db,
+                          rownames(de_result)[intersect(which(de_result$p_val_adj < 1E-100),
+                                                        which(abs(de_result$avg_log2FC) > 0.6))],
+                          "ENTREZID", "SYMBOL")
+  de_entrez_ids <- de_entrez_ids[!is.na(de_entrez_ids)]
+  
+  
+  ### pathway analysis
+  pathway_result <- pathwayAnalysis_CP(geneList = de_entrez_ids,
+                                       org = "mouse",
+                                       database = "GO",
+                                       title = paste0("Pathway_MO-6_vs_cDC2-1"),
+                                       pv_threshold = 0.05,
+                                       displayNum = 30,
+                                       imgPrint = TRUE,
+                                       dir = paste0(outputDir))
+  
+  write.xlsx(pathway_result, file = paste0(outputDir, "Pathway_Table_MO-6_vs_cDC2-1.xlsx"),
+             row.names = FALSE, sheetName = paste0("GO_Results"))
+  
+  
+  ###
   
   
   
