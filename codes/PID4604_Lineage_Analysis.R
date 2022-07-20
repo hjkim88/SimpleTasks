@@ -1407,7 +1407,24 @@ lineage_analysis <- function(Seurat_RObj_path="/Users/hyunjin.kim2/Documents/Sim
              row.names = FALSE, sheetName = paste0("GO_Results"))
   
   
-  ###
+  ### compare two trajectories
+  ### Mo-3 -> Mo-8 -> Mo-6 -> IM
+  ### Mo-3 -> Mo-4 -> Mo-5 -> cDC2-1
+  plot_trajectory_gexp(obj = seurat_obj,
+                       trace_base = "new_anno",
+                       base_order = c("Mo-3", "Mo-8", "Mo-6", "IM"),
+                       fdr_threshold = 0.01,
+                       top_gene_num = 20,
+                       organism = "mouse",
+                       result_path = paste0(outputDir, "/Mo-3_To_IM"))
+  plot_trajectory_gexp(obj = seurat_obj,
+                       trace_base = "new_anno",
+                       base_order = c("Mo-3", "Mo-4", "Mo-5", "cDC2-1"),
+                       fdr_threshold = 0.01,
+                       top_gene_num = 20,
+                       organism = "mouse",
+                       result_path = paste0(outputDir, "/Mo-3_To_cDC2-1"))
+  
   
   
   
