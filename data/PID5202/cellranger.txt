@@ -1,0 +1,8 @@
+### now I want to aggregate those results
+export PATH=/home/hyunjin.kim2/yard/apps/cellranger-7.0.0:$PATH
+
+cd /home/hyunjin.kim2/SimpleTasks/data/PID5202/
+
+cellranger aggr --id=PID5202_aggr \
+--csv=/home/hyunjin.kim2/SimpleTasks/data/PID5202/PID5202_prep_aggr.csv
+
