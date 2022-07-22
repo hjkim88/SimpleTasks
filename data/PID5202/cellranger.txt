@@ -1,8 +1,9 @@
 ### now I want to aggregate those results
 export PATH=/home/hyunjin.kim2/yard/apps/cellranger-7.0.0:$PATH
 
-cd /home/hyunjin.kim2/SimpleTasks/data/PID5202/
+### run PID5202_CellRanger_Aggr_CSV.ipynb
 
+### run CellRanger
 cellranger aggr --id=PID5202_aggr \
---csv=/home/hyunjin.kim2/SimpleTasks/data/PID5202/PID5202_prep_aggr.csv
+--csv=/home/hyunjin.kim2/SimpleTasks/data/PID5202/PID5202_prep_aggr2.csv
 
